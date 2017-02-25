@@ -178,6 +178,9 @@ class Video_Caption_Generator():
 video_data_path_train = '/home/shenxu/data/hdf5_video_vgg_fc6/train_batches/hdf5_chunk_list.txt'
 video_data_path_val = '/home/shenxu/data/hdf5_video_vgg_fc6/val_batches/hdf5_chunk_list.txt'
 video_data_path_test = '/home/shenxu/data/hdf5_video_vgg_fc6/val_batches/hdf5_chunk_list.txt'
+video_cap_path_train = '/home/shenxu/data/hdf5_sentence_vocab_vtt_buff16/train_batches/hdf5_chunk_list.txt'
+video_cap_path_val = '/home/shenxu/data/hdf5_sentence_vocab_vtt_buff16/val_batches/hdf5_chunk_list.txt'
+video_cap_path_test = '/home/shenxu/data/hdf5_sentence_vocab_vtt_buff16/val_batches/hdf5_chunk_list.txt'
 # seems to be no use
 video_feat_path = '/home/PaulChen/h5py_data/cont_augment/'
 
@@ -219,8 +222,7 @@ def get_video_data_HL(video_data_path, video_feat_path):
         pdb.set_trace()
     return np.array(List)
 
-def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test,
-    video_cap_path_train, video_cap_path_val, video_cap_path_test):
+def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test):
     video_list_train = get_video_data_HL(video_data_path_train, video_feat_path)
     train_title = []
     title = []
