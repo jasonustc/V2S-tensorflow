@@ -178,10 +178,6 @@ class Video_Caption_Generator():
 video_data_path_train = '/home/shenxu/data/hdf5_video_vgg_fc6/train_batches/hdf5_chunk_list.txt'
 video_data_path_val = '/home/shenxu/data/hdf5_video_vgg_fc6/val_batches/hdf5_chunk_list.txt'
 video_data_path_test = '/home/shenxu/data/hdf5_video_vgg_fc6/val_batches/hdf5_chunk_list.txt'
-video_cap_path_train = '/home/shenxu/data/hdf5_sentence_vocab_vtt_buff16/train_batches/hdf5_chunk_list.txt'
-video_cap_path_val = '/home/shenxu/data/hdf5_sentence_vocab_vtt_buff16/val_batches/hdf5_chunk_list.txt'
-video_cap_path_test = '/home/shenxu/data/hdf5_sentence_vocab_vtt_buff16/val_batches/hdf5_chunk_list.txt'
-# seems to be no use
 video_feat_path = '/home/PaulChen/h5py_data/cont_augment/'
 
 model_path = '/home/PaulChen/evalmodel/Att_baseline/models'
@@ -219,7 +215,6 @@ def get_video_data_HL(video_data_path, video_feat_path):
     List = []
     for ele in files:
         List.append(ele[:-1])
-        pdb.set_trace()
     return np.array(List)
 
 def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test):
@@ -229,8 +224,8 @@ def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_
     fname = []
     for ele in video_list_train:
         batch_data = h5py.File(ele)
-        batch_fname = batch_data['frame_fc7']
-        batch_title = batch_data['cont']
+        batch_fname = batch_data['data']
+        batch_title = batch_data['title']
         for i in xrange(len(batch_fname)):
                 fname.append(batch_fname[i])
                 title.append(batch_title[i])
@@ -239,8 +234,8 @@ def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_
     video_list_val = get_video_data_HL(video_data_path_val, video_feat_path)
     for ele in video_list_val:
         batch_data = h5py.File(ele)
-        batch_fname = batch_data['frame_fc7']
-        batch_title = batch_data['cont']
+        batch_fname = batch_data['data']
+        batch_title = batch_data['title']
         for i in xrange(len(batch_fname)):
                 fname.append(batch_fname[i])
                 title.append(batch_title[i])
@@ -248,8 +243,8 @@ def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_
     video_list_test = get_video_data_HL(video_data_path_test, video_feat_path)
     for ele in video_list_test:
         batch_data = h5py.File(ele)
-        batch_fname = batch_data['frame_fc7']
-        batch_title = batch_data['cont']
+        batch_fname = batch_data['data']
+        batch_title = batch_data['title']
         for i in xrange(len(batch_fname)):
                 fname.append(batch_fname[i])
                 title.append(batch_title[i])
@@ -289,6 +284,32 @@ def preProBuildWordVocab(sentence_iterator, word_count_threshold=5): # borrowed 
     bias_init_vector = np.log(bias_init_vector)
     bias_init_vector -= np.max(bias_init_vector) # shift to nice numeric range
     return wordtoix, ixtoword, bias_init_vector
+
+# title: already convert to word ids
+def get_bias_init_vector(video_data_path_train):
+    video_list_train = get_video_data_HL(video_data_path_train)
+    train_title = []
+    # get all sentences
+    for ele in video_list_train:
+        batch_data = h5py.File(ele)
+        batch_title = batch_data['title']
+        for i in xrange(len(batch_title)):
+            train_title.append(batch_title[i])
+    word_counts = {}
+    nsents = 0
+    for sent in train_title:
+        nsents += 1
+        for i in xrange(sent.shape[0]):
+            pdb.set_trace()
+            word_counts[sent[i]] = word_counts.get(sent[i], 0) + 1
+    word_counts['.'] = nsents
+    bias_init_vector = np.array([1.0*word_counts[key]] for key in word_counts.keys())
+    pdb.set_trace()
+    bias_init_vector /= np.sum(bias_init_vector) # normalize to frequencies
+    bias_init_vector = np.log(bias_init_vector)
+    bias_init_vector -= np.max(bias_init_vector) # shift to nice numeric range
+    return bias_init_vector
+
 
 
 def preProBuildLabel():
@@ -378,9 +399,9 @@ def train():
     captions = meta_data['Description'].values
     captions = map(lambda x: x.replace('.', ''), captions)
     captions = map(lambda x: x.replace(',', ''), captions)
-    wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions, word_count_threshold=1)
-
-    np.save('./data0/ixtoword', ixtoword)
+#    wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions, word_count_threshold=1)
+#    np.save('./data0/ixtoword', ixtoword)
+    bias_init_vector = get_bias_init_vector(video_data_path_train)
 
     model = Video_Caption_Generator(
             dim_image=dim_image,
@@ -411,6 +432,7 @@ def train():
 
             tStart = time.time()
             current_batch = h5py.File(train_data[current_batch_file_idx])
+            # why not just follow the dim order in current_feats?
             current_feats = np.zeros((batch_size, n_frame_step, dim_image))
             current_video_masks = np.zeros((batch_size, n_frame_step))
             current_video_len = np.zeros(batch_size)
@@ -421,8 +443,10 @@ def train():
                     continue
                 current_video_masks[ind,:idx[-1]+1] = 1
 
-            current_captions = current_batch['title']
-            current_caption_ind = map(lambda cap: [wordtoix[word] for word in cap.lower().split(' ') if word in wordtoix], current_captions)
+#            current_captions = current_batch['title']
+            current_captions_ind = current_batch['title']
+            ### n_caption_steps * batch_size
+#            current_caption_ind = map(lambda cap: [wordtoix[word] for word in cap.lower().split(' ') if word in wordtoix], current_captions)
 
             current_caption_matrix = sequence.pad_sequences(current_caption_ind, padding='post', maxlen=n_caption_step-1)
             current_caption_matrix = np.hstack( [current_caption_matrix, np.zeros( [len(current_caption_matrix),1]) ] ).astype(int)
