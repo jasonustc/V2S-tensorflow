@@ -7,7 +7,7 @@ import pdb
 import time
 import json
 from collections import defaultdict
-from tensorflow.models.rnn import rnn, rnn_cell
+#from tensorflow.models.rnn import rnn, rnn_cell
 from keras.preprocessing import sequence
 from cocoeval import COCOScorer
 import unicodedata
@@ -45,22 +45,26 @@ def parse_args():
 
 class Video_Caption_Generator():
     def __init__(self, dim_image, n_words, dim_hidden, batch_size, n_lstm_steps, drop_out_rate, bias_init_vector=None):
+        # parameters and variables
         self.dim_image = dim_image
         self.n_words = n_words
         self.dim_hidden = dim_hidden
         self.batch_size = batch_size
+        # number of frame steps
         self.n_lstm_steps = n_lstm_steps
         self.drop_out_rate = drop_out_rate
 
         with tf.device("/cpu:0"):
             self.Wemb = tf.Variable(tf.random_uniform([n_words, dim_hidden], -0.1, 0.1), name='Wemb')
+#            self.Wemb = tf.get_variable("Wemb", [n_words, dim_hidden], initializer=tf.random_uniform_initializer(-0.1,0.1))
 
-        self.lstm3 = rnn_cell.LSTMCell(self.dim_hidden,2*self.dim_hidden,use_peepholes = True)
-        self.lstm3_dropout = rnn_cell.DropoutWrapper(self.lstm3,output_keep_prob=1 - self.drop_out_rate)
+        self.lstm3 = tf.contrib.rnn.LSTMCell(self.dim_hidden,2*self.dim_hidden,use_peepholes = True, state_is_tuple=False)
+        self.lstm3_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm3,output_keep_prob=1 - self.drop_out_rate)
 
         self.encode_image_W = tf.Variable( tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1), name='encode_image_W')
         self.encode_image_b = tf.Variable( tf.zeros([dim_hidden]), name='encode_image_b')
         self.embed_att_w = tf.Variable(tf.random_uniform([dim_hidden, 1], -0.1,0.1), name='embed_att_w')
+        # why need a Ua and Wa?
         self.embed_att_Wa = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden], -0.1,0.1), name='embed_att_Wa')
         self.embed_att_Ua = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden],-0.1,0.1), name='embed_att_Ua')
         self.embed_att_ba = tf.Variable( tf.zeros([dim_hidden]), name='embed_att_ba')
@@ -75,6 +79,7 @@ class Video_Caption_Generator():
         self.embed_nn_bp = tf.Variable(tf.zeros([dim_hidden]), name='embed_nn_bp')
 
     def build_model(self):
+        # input, output, computation graph, loss
         video = tf.placeholder(tf.float32, [self.batch_size, self.n_lstm_steps, self.dim_image]) # b x n x d
         video_mask = tf.placeholder(tf.float32, [self.batch_size, self.n_lstm_steps]) # b x n
 
@@ -92,36 +97,43 @@ class Video_Caption_Generator():
         loss_caption = 0.0
 
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        brcst_w = tf.tile(tf.expand_dims(self.embed_att_w, 0), [self.n_lstm_steps,1,1]) # n x h x 1
-        image_part = tf.batch_matmul(image_emb, tf.tile(tf.expand_dims(self.embed_att_Ua, 0), [self.n_lstm_steps,1,1])) + self.embed_att_ba # n x b x h
-        for i in range(n_caption_step):
-            e = tf.tanh(tf.matmul(h_prev, self.embed_att_Wa) + image_part) # n x b x h
-            e = tf.batch_matmul(e, brcst_w)    # unnormalized relevance score 
-            e = tf.reduce_sum(e,2) # n x b
-            e_hat_exp = tf.mul(tf.transpose(video_mask), tf.exp(e)) # n x b 
-            denomin = tf.reduce_sum(e_hat_exp,0) # b
-            denomin = denomin + tf.to_float(tf.equal(denomin, 0))   # regularize denominator
-            alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h  # normalize to obtain alpha
-            attention_list = tf.mul(alphas, image_emb) # n x b x h
-            atten = tf.reduce_sum(attention_list,0) # b x h       #  soft-attention weighted sum
-            if i > 0: tf.get_variable_scope().reuse_variables()
+#        brcst_w = tf.tile(tf.expand_dims(self.embed_att_w, 0), [self.n_lstm_steps,1,1]) # n x h x 1
+#        image_part = tf.batch_matmul(image_emb, tf.tile(tf.expand_dims(self.embed_att_Ua, 0), [self.n_lstm_steps,1,1])) + self.embed_att_ba # n x b x h
+        image_part = tf.reshape(image_emb, [-1, self.dim_hidden])
+        image_part = tf.matmul(image_part, self.embed_att_Ua) + self.embed_att_ba
+        image_part = tf.reshape(image_part, [self.n_lstm_steps, self.batch_size, self.dim_hidden])
+        with tf.variable_scope("model") as scope:
+            for i in range(n_caption_step):
+                e = tf.tanh(tf.matmul(h_prev, self.embed_att_Wa) + image_part) # n x b x h
+                #e = tf.batch_matmul(e, brcst_w)    # unnormalized relevance score 
+                e = tf.reshape(e, [-1, self.dim_hidden])
+                e = tf.matmul(e, self.embed_att_w) # n x b
+                e = tf.reshape(e, [self.n_lstm_steps, self.batch_size])
+#               e = tf.reduce_sum(e,2) # n x b
+                e_hat_exp = tf.multiply(tf.transpose(video_mask), tf.exp(e)) # n x b 
+                denomin = tf.reduce_sum(e_hat_exp,0) # b
+                denomin = denomin + tf.to_float(tf.equal(denomin, 0))   # regularize denominator
+                alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h  # normalize to obtain alpha
+                attention_list = tf.multiply(alphas, image_emb) # n x b x h
+                atten = tf.reduce_sum(attention_list,0) # b x h       #  soft-attention weighted sum
+#                if i > 0: tf.get_variable_scope().reuse_variables()
+                if i > 0: scope.reuse_variables()
+                with tf.variable_scope("LSTM3"):
+                    output1, state1 = self.lstm3_dropout(tf.concat([atten, current_embed], 1), state1 ) # b x h
 
-            with tf.variable_scope("LSTM3"):
-                output1, state1 = self.lstm3_dropout( tf.concat(1,[atten, current_embed]), state1 ) # b x h
+                output2 = tf.tanh(tf.nn.xw_plus_b(tf.concat([output1,atten,current_embed], 1), self.embed_nn_Wp, self.embed_nn_bp)) # b x h
+                h_prev = output1 # b x h
+                labels = tf.expand_dims(caption[:,i], 1) # b x 1
+                indices = tf.expand_dims(tf.range(0, self.batch_size, 1), 1) # b x 1
+                concated = tf.concat([indices, labels], 1) # b x 2
+                onehot_labels = tf.sparse_to_dense(concated, tf.stack([self.batch_size, self.n_words]), 1.0, 0.0) # b x w
+                with tf.device("/cpu:0"):
+                    current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
 
-            output2 = tf.tanh(tf.nn.xw_plus_b(tf.concat(1,[output1,atten,current_embed]), self.embed_nn_Wp, self.embed_nn_bp)) # b x h
-            h_prev = output1 # b x h
-            labels = tf.expand_dims(caption[:,i], 1) # b x 1
-            indices = tf.expand_dims(tf.range(0, self.batch_size, 1), 1) # b x 1
-            concated = tf.concat(1, [indices, labels]) # b x 2
-            onehot_labels = tf.sparse_to_dense(concated, tf.pack([self.batch_size, self.n_words]), 1.0, 0.0) # b x w
-            with tf.device("/cpu:0"):
-                current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
-
-            logit_words = tf.nn.xw_plus_b(output2, self.embed_word_W, self.embed_word_b) # b x w
-            cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logit_words, onehot_labels) # b x 1
-            cross_entropy = cross_entropy * caption_mask[:,i] # b x 1
-            loss_caption += tf.reduce_sum(cross_entropy) # 1
+                logit_words = tf.nn.xw_plus_b(output2, self.embed_word_W, self.embed_word_b) # b x w
+                cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits = logit_words, labels = onehot_labels) # b x 1
+                cross_entropy = cross_entropy * caption_mask[:,i] # b x 1
+                loss_caption += tf.reduce_sum(cross_entropy) # 1
 
         loss_caption = loss_caption / tf.reduce_sum(caption_mask)
         loss = loss_caption
@@ -144,50 +156,59 @@ class Video_Caption_Generator():
 
         current_embed = tf.zeros([self.batch_size, self.dim_hidden])
         brcst_w = tf.tile(tf.expand_dims(self.embed_att_w, 0), [self.n_lstm_steps,1,1])   # n x h x 1
-        image_part = tf.batch_matmul(image_emb, tf.tile(tf.expand_dims(self.embed_att_Ua, 0), [self.n_lstm_steps,1,1])) +  self.embed_att_ba # n x b x h
-        for i in range(n_caption_step):
-            e = tf.tanh(tf.matmul(h_prev, self.embed_att_Wa) + image_part) # n x b x h
-            e = tf.batch_matmul(e, brcst_w)
-            e = tf.reduce_sum(e,2) # n x b
-            e_hat_exp = tf.mul(tf.transpose(video_mask), tf.exp(e)) # n x b
-            denomin = tf.reduce_sum(e_hat_exp,0) # b
-            denomin = denomin + tf.to_float(tf.equal(denomin, 0))
-            alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h
-            attention_list = tf.mul(alphas, image_emb) # n x b x h                
-            atten = tf.reduce_sum(attention_list,0) # b x h
+#        image_part = tf.batch_matmul(image_emb, tf.tile(tf.expand_dims(self.embed_att_Ua, 0), [self.n_lstm_steps,1,1])) +  self.embed_att_ba # n x b x h
+        image_part = tf.reshape(image_emb, [-1, self.dim_hidden])
+        image_part = tf.matmul(image_part, self.embed_att_Ua) + self.embed_att_ba
+        image_part = tf.reshape(image_part, [self.n_lstm_steps, self.batch_size, self.dim_hidden]) # n x b x h
+        with tf.variable_scope("generator") as scope:
+            for i in range(n_caption_step):
+                e = tf.tanh(tf.matmul(h_prev, self.embed_att_Wa) + image_part) # n x b x h
+#                e = tf.batch_matmul(e, brcst_w)
+                e = tf.reshape(e, [-1, self.dim_hidden])
+                e = tf.matmul(e, self.embed_att_w) # n x b
+                e = tf.reshape(e, [self.n_lstm_steps, self.batch_size])
+#                e = tf.reduce_sum(e,2) # n x b
+                e_hat_exp = tf.mul(tf.transpose(video_mask), tf.exp(e)) # n x b
+                denomin = tf.reduce_sum(e_hat_exp,0) # b
+                denomin = denomin + tf.to_float(tf.equal(denomin, 0))
+                alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h
+                attention_list = tf.mul(alphas, image_emb) # n x b x h                
+                atten = tf.reduce_sum(attention_list,0) # b x h
 
-            if i > 0: tf.get_variable_scope().reuse_variables()
+                if i > 0: scope.reuse_variables()
+                tf.get_variable_scope().reuse_variables()
 
-            with tf.variable_scope("LSTM3") as vs:
-                output1, state1 = self.lstm3( tf.concat(1,[atten, current_embed]), state1 ) # b x h
-                lstm3_variables = [v for v in tf.all_variables() if v.name.startswith(vs.name)]
+                with tf.variable_scope("LSTM3") as vs:
+                    output1, state1 = self.lstm3(tf.concat([atten, current_embed], 1), state1) # b x h
+                    lstm3_variables = [v for v in tf.all_variables() if v.name.startswith(vs.name)]
 
-            output2 = tf.tanh(tf.nn.xw_plus_b(tf.concat(1,[output1,atten,current_embed]), self.embed_nn_Wp, self.embed_nn_bp)) # b x h
-            h_prev = output1
-            logit_words = tf.nn.xw_plus_b( output2, self.embed_word_W, self.embed_word_b) # b x w
-            max_prob_index = tf.argmax(logit_words, 1) # b
-            generated_words.append(max_prob_index) # b
-            with tf.device("/cpu:0"):
-                current_embed = tf.nn.embedding_lookup(self.Wemb, max_prob_index)
+                output2 = tf.tanh(tf.nn.xw_plus_b(tf.concat([output1,atten,current_embed], 1), self.embed_nn_Wp, self.embed_nn_bp)) # b x h
+                h_prev = output1
+                logit_words = tf.nn.xw_plus_b( output2, self.embed_word_W, self.embed_word_b) # b x w
+                max_prob_index = tf.argmax(logit_words, 1) # b
+                generated_words.append(max_prob_index) # b
+                with tf.device("/cpu:0"):
+                    current_embed = tf.nn.embedding_lookup(self.Wemb, max_prob_index)
 
-        generated_words = tf.transpose(tf.pack(generated_words))
+#        generated_words = tf.transpose(tf.pack(generated_words))
+        generated_words = tf.transpose(tf.stack(generated_words)) # n x b
         return video, video_mask, generated_words, lstm3_variables
 
 
 ############### Global Parameters ###############
-video_data_path_train = '/home/shenxu/data/hdf5_video_vgg_fc6/train_batches/hdf5_chunk_list.txt'
-video_data_path_val = '/home/shenxu/data/hdf5_video_vgg_fc6/val_batches/hdf5_chunk_list.txt'
-video_data_path_test = '/home/shenxu/data/hdf5_video_vgg_fc6/val_batches/hdf5_chunk_list.txt'
+video_data_path_train = '/home/shenxu/V2S-tensorflow/data0/train_vn.txt'
+video_data_path_val = '/home/shenxu/V2S-tensorflow/data0/val_vn.txt'
+video_data_path_test = '/home/shenxu/V2S-tensorflow/data0/val_vn.txt'
 video_feat_path = '/home/PaulChen/h5py_data/cont_augment/'
 
 model_path = '/home/PaulChen/evalmodel/Att_baseline/models'
 ############## Train Parameters #################
-dim_image = 4096*2
-dim_hidden= 512*2
-n_frame_step = 45
-n_caption_step = 35
+dim_image = 4096
+dim_hidden= 512
+n_frame_step = 48
+n_caption_step = 48
 n_epochs = 200
-batch_size = 100
+batch_size = 16
 learning_rate = 0.0001 
 ##################################################
 
@@ -252,7 +273,8 @@ def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_
     fname = np.array(fname)
     title = np.array(title)
     train_title = np.array(train_title)
-    video_data = pd.DataFrame({'Description':train_title})
+#    video_data = pd.DataFrame({'Description':train_title})
+    video_data = train_title
 
     return video_data, video_list_train, video_list_val, video_list_test
 
@@ -287,7 +309,7 @@ def preProBuildWordVocab(sentence_iterator, word_count_threshold=5): # borrowed 
 
 # title: already convert to word ids
 def get_bias_init_vector(video_data_path_train):
-    video_list_train = get_video_data_HL(video_data_path_train)
+    video_list_train = get_video_data_HL(video_data_path_train, video_feat_path)
     train_title = []
     # get all sentences
     for ele in video_list_train:
@@ -300,11 +322,9 @@ def get_bias_init_vector(video_data_path_train):
     for sent in train_title:
         nsents += 1
         for i in xrange(sent.shape[0]):
-            pdb.set_trace()
             word_counts[sent[i]] = word_counts.get(sent[i], 0) + 1
     word_counts['.'] = nsents
-    bias_init_vector = np.array([1.0*word_counts[key]] for key in word_counts.keys())
-    pdb.set_trace()
+    bias_init_vector = np.array([1.0*word_counts[key] for key in word_counts.keys()])
     bias_init_vector /= np.sum(bias_init_vector) # normalize to frequencies
     bias_init_vector = np.log(bias_init_vector)
     bias_init_vector -= np.max(bias_init_vector) # shift to nice numeric range
@@ -330,6 +350,7 @@ def testing_one(sess, video_feat_path, ixtoword, video_tf, video_mask_tf, captio
     #print video_feat_path
     test_data_batch = h5py.File(video_feat_path)
     gt_captions = json.load(open('msvd2sent.json'))
+    pdb.set_trace()
 
     video_feat = np.zeros((batch_size, n_frame_step, dim_image))
     video_mask = np.zeros((batch_size, n_frame_step))
@@ -396,16 +417,17 @@ def testing_all(sess, test_data, ixtoword, video_tf, video_mask_tf, caption_tf):
 
 def train():
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
-    captions = meta_data['Description'].values
-    captions = map(lambda x: x.replace('.', ''), captions)
-    captions = map(lambda x: x.replace(',', ''), captions)
+#    captions = meta_data['Description'].values
+#    captions = map(lambda x: x.replace('.', ''), captions)
+#    captions = map(lambda x: x.replace(',', ''), captions)
 #    wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions, word_count_threshold=1)
-#    np.save('./data0/ixtoword', ixtoword)
+    ixtoword = pd.Series(np.load('./data0/ixtoword.npy').tolist())
     bias_init_vector = get_bias_init_vector(video_data_path_train)
 
     model = Video_Caption_Generator(
             dim_image=dim_image,
-            n_words=len(wordtoix),
+#            n_words=len(wordtoix),
+            n_words=len(ixtoword.keys()),
             dim_hidden=dim_hidden,
             batch_size=batch_size,
             n_lstm_steps=n_frame_step,
@@ -418,7 +440,8 @@ def train():
     with tf.device("/cpu:0"):
         saver = tf.train.Saver(max_to_keep=100)
     train_op = tf.train.AdamOptimizer(learning_rate).minimize(tf_loss)
-    tf.initialize_all_variables().run()
+#    tf.initialize_all_variables().run()
+    tf.global_variables_initializer().run()
 
     tStart_total = time.time()
     for epoch in range(n_epochs):
@@ -444,12 +467,12 @@ def train():
                 current_video_masks[ind,:idx[-1]+1] = 1
 
 #            current_captions = current_batch['title']
-            current_captions_ind = current_batch['title']
             ### n_caption_steps * batch_size
 #            current_caption_ind = map(lambda cap: [wordtoix[word] for word in cap.lower().split(' ') if word in wordtoix], current_captions)
-
-            current_caption_matrix = sequence.pad_sequences(current_caption_ind, padding='post', maxlen=n_caption_step-1)
-            current_caption_matrix = np.hstack( [current_caption_matrix, np.zeros( [len(current_caption_matrix),1]) ] ).astype(int)
+#            current_caption_matrix = sequence.pad_sequences(current_caption_ind, padding='post', maxlen=n_caption_step-1)
+#            current_caption_matrix = np.hstack( [current_caption_matrix, np.zeros( [len(current_caption_matrix),1]) ] ).astype(int)
+            current_caption_matrix = np.array(current_batch['title']).astype(int).swapaxes(0, 1)
+            current_caption_matrix[current_caption_matrix == -1] = 0
             current_caption_masks = np.zeros((current_caption_matrix.shape[0], current_caption_matrix.shape[1]))
             nonzeros = np.array( map(lambda x: (x != 0).sum()+1, current_caption_matrix ))
 
@@ -473,25 +496,25 @@ def train():
         tStop_epoch = time.time()
         print "Epoch Time Cost:", round(tStop_epoch - tStart_epoch,2), "s"
 
-        if np.mod(epoch, 10) == 0 or epoch == n_epochs - 1:
-            print "Epoch ", epoch, " is done. Saving the model ..."
-            with tf.device("/cpu:0"):
-                saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
-
-            current_batch = h5py.File(val_data[np.random.randint(0,len(val_data))])
-            video_tf, video_mask_tf, caption_tf, lstm3_variables_tf = model.build_generator()
-            ixtoword = pd.Series(np.load('./data0/ixtoword.npy').tolist())
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, train_data[-2:], ixtoword, video_tf, video_mask_tf, caption_tf)
-            for key in pred_dict.keys():
-                for ele in gt_dict[key]:
-                    print "GT:  " + ele['caption']
-                print "PD:  " + pred_dict[key][0]['caption']
-                print '-------'
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, val_data, ixtoword,video_tf, video_mask_tf, caption_tf)
-            scorer = COCOScorer()
-            total_score = scorer.score(gt_dict, pred_dict, id_list)
-        sys.stdout.flush()
-
+#        if np.mod(epoch, 10) == 0 or epoch == n_epochs - 1:
+#            print "Epoch ", epoch, " is done. Saving the model ..."
+#            with tf.device("/cpu:0"):
+#                saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
+#
+#            current_batch = h5py.File(val_data[np.random.randint(0,len(val_data))])
+#            video_tf, video_mask_tf, caption_tf, lstm3_variables_tf = model.build_generator()
+#            # convert to key-value dictionary
+#            ixtoword = pd.Series(np.load('./data0/ixtoword.npy').tolist())
+#            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, train_data[-2:], ixtoword, video_tf, video_mask_tf, caption_tf)
+#            for key in pred_dict.keys():
+#                for ele in gt_dict[key]:
+#                    print "GT:  " + ele['caption']
+#                print "PD:  " + pred_dict[key][0]['caption']
+#                print '-------'
+#            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, val_data, ixtoword,video_tf, video_mask_tf, caption_tf)
+#            scorer = COCOScorer()
+#            total_score = scorer.score(gt_dict, pred_dict, id_list)
+#        sys.stdout.flush()
     print "Finally, saving the model ..."
     with tf.device("/cpu:0"):
         saver.save(sess, os.path.join(model_path, 'model'), global_step=n_epochs)

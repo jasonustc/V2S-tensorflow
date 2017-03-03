@@ -4,8 +4,8 @@ import json
 import pdb
 import numpy as np
 
-video_path = '/media/data/MSVD/YouTubeClips'
-output_path = 'msvd_data/data_ch10/labels_complete/'
+video_path = '/disk_new/XuKS/YouTubeClips'
+output_path = '/disk_new/shenxu/msvd_data/'
 
 # Split data to train data, valid data and test data
 def splitdata(path, train_num, val_num):
@@ -79,13 +79,14 @@ def get_label_list(fname):
     	json.dump([frame_list, label_list], open(outfile,"w"))
 
 if __name__=='__main__':
-    b = getlist(video_path)
-    print b
-    count = 0
-    for ele in b:
-        fname = ele
-        if not os.path.isfile(output_path+str(fname)+'.json'):
-            get_label_list(fname)
-        count += 1
-    print count
+#    b = getlist(video_path)
+#    print b
+#    count = 0
+#    for ele in b:
+#        fname = ele
+#        if not os.path.isfile(output_path+str(fname)+'.json'):
+#            get_label_list(fname)
+#        count += 1
+#    print count
+    splitdata(video_path, 1200, 100)
 
