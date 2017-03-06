@@ -7,7 +7,7 @@ import pdb
 import time
 import json
 from collections import defaultdict
-from tensorflow.models.rnn import rnn, rnn_cell
+#from tensorflow.models.rnn import rnn, rnn_cell
 from keras.preprocessing import sequence
 from cocoeval import COCOScorer
 import unicodedata
@@ -55,8 +55,9 @@ class Video_Caption_Generator():
         with tf.device("/cpu:0"):
             self.Wemb = tf.Variable(tf.random_uniform([n_words, dim_hidden], -0.1, 0.1), name='Wemb')
 
-        self.lstm3 = rnn_cell.LSTMCell(self.dim_hidden,2*self.dim_hidden,use_peepholes = True)
-        self.lstm3_dropout = rnn_cell.DropoutWrapper(self.lstm3,output_keep_prob=1 - self.drop_out_rate)
+        self.lstm3 = tf.contrib.rnn.LSTMCell(self.dim_hidden,2*self.dim_hidden,
+            use_peepholes = True, state_is_tuple = False)
+        self.lstm3_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm3,output_keep_prob=1 - self.drop_out_rate)
 
         self.encode_image_W = tf.Variable( tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1), name='encode_image_W')
         self.encode_image_b = tf.Variable( tf.zeros([dim_hidden]), name='encode_image_b')
@@ -92,36 +93,44 @@ class Video_Caption_Generator():
         loss_caption = 0.0
 
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        brcst_w = tf.tile(tf.expand_dims(self.embed_att_w, 0), [self.n_lstm_steps,1,1]) # n x h x 1
-        image_part = tf.batch_matmul(image_emb, tf.tile(tf.expand_dims(self.embed_att_Ua, 0), [self.n_lstm_steps,1,1])) + self.embed_att_ba # n x b x h
-        for i in range(n_caption_step):
-            e = tf.tanh(tf.matmul(h_prev, self.embed_att_Wa) + image_part) # n x b x h
-            e = tf.batch_matmul(e, brcst_w)    # unnormalized relevance score 
-            e = tf.reduce_sum(e,2) # n x b
-            e_hat_exp = tf.mul(tf.transpose(video_mask), tf.exp(e)) # n x b 
-            denomin = tf.reduce_sum(e_hat_exp,0) # b
-            denomin = denomin + tf.to_float(tf.equal(denomin, 0))   # regularize denominator
-            alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h  # normalize to obtain alpha
-            attention_list = tf.mul(alphas, image_emb) # n x b x h
-            atten = tf.reduce_sum(attention_list,0) # b x h       #  soft-attention weighted sum
-            if i > 0: tf.get_variable_scope().reuse_variables()
+#        brcst_w = tf.tile(tf.expand_dims(self.embed_att_w, 0), [self.n_lstm_steps,1,1]) # n x h x 1
+#        image_part = tf.batch_matmul(image_emb, tf.tile(tf.expand_dims(self.embed_att_Ua, 0), [self.n_lstm_steps,1,1])) + self.embed_att_ba # n x b x h
+        image_part = tf.reshape(image_emb, [-1, self.dim_hidden])
+        image_part = tf.matmul(image_part, self.embed_att_Ua) + self.embed_att_ba
+        image_part = tf.reshape(image_part, [self.n_lstm_steps, self.batch_size, self.dim_hidden])
+        with tf.variable_scope("model") as scope:
+            for i in range(n_caption_step):
+                e = tf.tanh(tf.matmul(h_prev, self.embed_att_Wa) + image_part) # n x b x h
+    #            e = tf.batch_matmul(e, brcst_w)    # unnormalized relevance score 
+                e = tf.reshape(e, [-1, self.dim_hidden])
+                e = tf.matmul(e, self.embed_att_w) # n x b
+                e = tf.reshape(e, [self.n_lstm_steps, self.batch_size])
+    #            e = tf.reduce_sum(e,2) # n x b
+                e_hat_exp = tf.mul(tf.transpose(video_mask), tf.exp(e)) # n x b 
+                denomin = tf.reduce_sum(e_hat_exp,0) # b
+                denomin = denomin + tf.to_float(tf.equal(denomin, 0))   # regularize denominator
+                alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h  # normalize to obtain alpha
+                attention_list = tf.mul(alphas, image_emb) # n x b x h
+                atten = tf.reduce_sum(attention_list,0) # b x h       #  soft-attention weighted sum
+#                if i > 0: tf.get_variable_scope().reuse_variables()
+                if i > 0: scope.reuse_variables()
 
-            with tf.variable_scope("LSTM3"):
-                output1, state1 = self.lstm3_dropout( tf.concat(1,[atten, current_embed]), state1 ) # b x h
+                with tf.variable_scope("LSTM3"):
+                    output1, state1 = self.lstm3_dropout( tf.concat(1,[atten, current_embed]), state1 ) # b x h
 
-            output2 = tf.tanh(tf.nn.xw_plus_b(tf.concat(1,[output1,atten,current_embed]), self.embed_nn_Wp, self.embed_nn_bp)) # b x h
-            h_prev = output1 # b x h
-            labels = tf.expand_dims(caption[:,i], 1) # b x 1
-            indices = tf.expand_dims(tf.range(0, self.batch_size, 1), 1) # b x 1
-            concated = tf.concat(1, [indices, labels]) # b x 2
-            onehot_labels = tf.sparse_to_dense(concated, tf.pack([self.batch_size, self.n_words]), 1.0, 0.0) # b x w
-            with tf.device("/cpu:0"):
-                current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
+                output2 = tf.tanh(tf.nn.xw_plus_b(tf.concat(1,[output1,atten,current_embed]), self.embed_nn_Wp, self.embed_nn_bp)) # b x h
+                h_prev = output1 # b x h
+                labels = tf.expand_dims(caption[:,i], 1) # b x 1
+                indices = tf.expand_dims(tf.range(0, self.batch_size, 1), 1) # b x 1
+                concated = tf.concat(1, [indices, labels]) # b x 2
+                onehot_labels = tf.sparse_to_dense(concated, tf.pack([self.batch_size, self.n_words]), 1.0, 0.0) # b x w
+                with tf.device("/cpu:0"):
+                    current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
 
-            logit_words = tf.nn.xw_plus_b(output2, self.embed_word_W, self.embed_word_b) # b x w
-            cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logit_words, onehot_labels) # b x 1
-            cross_entropy = cross_entropy * caption_mask[:,i] # b x 1
-            loss_caption += tf.reduce_sum(cross_entropy) # 1
+                logit_words = tf.nn.xw_plus_b(output2, self.embed_word_W, self.embed_word_b) # b x w
+                cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logit_words, onehot_labels) # b x 1
+                cross_entropy = cross_entropy * caption_mask[:,i] # b x 1
+                loss_caption += tf.reduce_sum(cross_entropy) # 1
 
         loss_caption = loss_caption / tf.reduce_sum(caption_mask)
         loss = loss_caption
@@ -144,31 +153,39 @@ class Video_Caption_Generator():
 
         current_embed = tf.zeros([self.batch_size, self.dim_hidden])
         brcst_w = tf.tile(tf.expand_dims(self.embed_att_w, 0), [self.n_lstm_steps,1,1])   # n x h x 1
-        image_part = tf.batch_matmul(image_emb, tf.tile(tf.expand_dims(self.embed_att_Ua, 0), [self.n_lstm_steps,1,1])) +  self.embed_att_ba # n x b x h
-        for i in range(n_caption_step):
-            e = tf.tanh(tf.matmul(h_prev, self.embed_att_Wa) + image_part) # n x b x h
-            e = tf.batch_matmul(e, brcst_w)
-            e = tf.reduce_sum(e,2) # n x b
-            e_hat_exp = tf.mul(tf.transpose(video_mask), tf.exp(e)) # n x b
-            denomin = tf.reduce_sum(e_hat_exp,0) # b
-            denomin = denomin + tf.to_float(tf.equal(denomin, 0))
-            alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h
-            attention_list = tf.mul(alphas, image_emb) # n x b x h                
-            atten = tf.reduce_sum(attention_list,0) # b x h
+#        image_part = tf.batch_matmul(image_emb, tf.tile(tf.expand_dims(self.embed_att_Ua, 0), [self.n_lstm_steps,1,1])) +  self.embed_att_ba # n x b x h
+        image_part = tf.reshape(image_emb, [-1, self.dim_hidden])
+        image_part = tf.matmul(image_part, self.embed_att_Ua) + self.embed_att_ba
+        image_part = tf.reshape(image_part, [self.n_lstm_steps, self.batch_size, self.dim_hidden])
+        with tf.variable_scope("generator") as scope:
+            for i in range(n_caption_step):
+                e = tf.tanh(tf.matmul(h_prev, self.embed_att_Wa) + image_part) # n x b x h
+    #            e = tf.batch_matmul(e, brcst_w)
+                e = tf.reshape(e, [-1, self.dim_hidden])
+                e = tf.matmul(e, self.embed_att_w) # n x b
+                e = tf.reshape(e, [self.n_lstm_steps, self.batch_size])
+    #            e = tf.reduce_sum(e,2) # n x b
+                e_hat_exp = tf.mul(tf.transpose(video_mask), tf.exp(e)) # n x b
+                denomin = tf.reduce_sum(e_hat_exp,0) # b
+                denomin = denomin + tf.to_float(tf.equal(denomin, 0))
+                alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h
+                attention_list = tf.mul(alphas, image_emb) # n x b x h                
+                atten = tf.reduce_sum(attention_list,0) # b x h
 
-            if i > 0: tf.get_variable_scope().reuse_variables()
+#                if i > 0: tf.get_variable_scope().reuse_variables()
+                if i > 0: scope.reuse_variables()
 
-            with tf.variable_scope("LSTM3") as vs:
-                output1, state1 = self.lstm3( tf.concat(1,[atten, current_embed]), state1 ) # b x h
-                lstm3_variables = [v for v in tf.all_variables() if v.name.startswith(vs.name)]
+                with tf.variable_scope("LSTM3") as vs:
+                    output1, state1 = self.lstm3( tf.concat(1,[atten, current_embed]), state1 ) # b x h
+                    lstm3_variables = [v for v in tf.all_variables() if v.name.startswith(vs.name)]
 
-            output2 = tf.tanh(tf.nn.xw_plus_b(tf.concat(1,[output1,atten,current_embed]), self.embed_nn_Wp, self.embed_nn_bp)) # b x h
-            h_prev = output1
-            logit_words = tf.nn.xw_plus_b( output2, self.embed_word_W, self.embed_word_b) # b x w
-            max_prob_index = tf.argmax(logit_words, 1) # b
-            generated_words.append(max_prob_index) # b
-            with tf.device("/cpu:0"):
-                current_embed = tf.nn.embedding_lookup(self.Wemb, max_prob_index)
+                output2 = tf.tanh(tf.nn.xw_plus_b(tf.concat(1,[output1,atten,current_embed]), self.embed_nn_Wp, self.embed_nn_bp)) # b x h
+                h_prev = output1
+                logit_words = tf.nn.xw_plus_b( output2, self.embed_word_W, self.embed_word_b) # b x w
+                max_prob_index = tf.argmax(logit_words, 1) # b
+                generated_words.append(max_prob_index) # b
+                with tf.device("/cpu:0"):
+                    current_embed = tf.nn.embedding_lookup(self.Wemb, max_prob_index)
 
         generated_words = tf.transpose(tf.pack(generated_words))
         return video, video_mask, generated_words, lstm3_variables
@@ -227,8 +244,8 @@ def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_
     fname = []
     for ele in video_list_train:
         batch_data = h5py.File(ele)
-        batch_fname = batch_data['frame_fc7']
-        batch_title = batch_data['cont']
+        batch_fname = batch_data['fname']
+        batch_title = batch_data['title']
         for i in xrange(len(batch_fname)):
                 fname.append(batch_fname[i])
                 title.append(batch_title[i])
@@ -237,8 +254,8 @@ def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_
     video_list_val = get_video_data_HL(video_data_path_val, video_feat_path)
     for ele in video_list_val:
         batch_data = h5py.File(ele)
-        batch_fname = batch_data['frame_fc7']
-        batch_title = batch_data['cont']
+        batch_fname = batch_data['fname']
+        batch_title = batch_data['title']
         for i in xrange(len(batch_fname)):
                 fname.append(batch_fname[i])
                 title.append(batch_title[i])
@@ -246,8 +263,8 @@ def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_
     video_list_test = get_video_data_HL(video_data_path_test, video_feat_path)
     for ele in video_list_test:
         batch_data = h5py.File(ele)
-        batch_fname = batch_data['frame_fc7']
-        batch_title = batch_data['cont']
+        batch_fname = batch_data['fname']
+        batch_title = batch_data['title']
         for i in xrange(len(batch_fname)):
                 fname.append(batch_fname[i])
                 title.append(batch_title[i])
