@@ -3,7 +3,7 @@
 #     File Name           :     get_list.py
 #     Created By          :     shenxu
 #     Creation Date       :     [2017-03-01 09:07]
-#     Last Modified       :     [2017-03-05 05:08]
+#     Last Modified       :     [2017-03-05 22:19]
 #     Description         :      
 #################################################################################
 import os
@@ -86,20 +86,31 @@ def merge_and_save_as_h5(feat_folder, feat_name, key):
     batch = h5py.File(h5_file, 'w')
     batch[key] = all_data
 
+def build_list(batch_folder):
+    assert os.path.isdir(batch_folder)
+    datasets = ['train', 'val', 'test']
+    for dataset in datasets:
+        with open(os.path.join(batch_folder, dataset + '_vn.txt'), 'w') as of:
+            for f in os.listdir(batch_folder):
+                if f.startswith(dataset) and f.endswith('.h5'): 
+                    of.write(os.path.join(batch_folder, f) + '\n')
+            of.close()
+
 
 if __name__ == '__main__':
 #    splitdata('/disk_new/XuKS/YouTubeClips', 1200, 100)
 #    get_index_file_c3d('/disk_2T/shenxu/msvd_data/', '/disk_2T/XuKS/YouTubeClips_convert/',
 #            '/disk_2T/shenxu/msvd_feat_c3d/', 'c3d_input_list.txt', 'c3d_output_prefix.txt')
 #    get_binary_data_c3d('/disk_2T/shenxu/msvd_feat_c3d/n_Z0-giaspE_270_278/000000.fc6-1', [1, 4096])
-    c3d_feat_folder = '/disk_2T/shenxu/msvd_feat_c3d/'
-    folders = os.listdir(c3d_feat_folder)
-    count = 0
-    for folder in folders:
-        if os.path.isdir(os.path.join(c3d_feat_folder, folder)):
-            merge_and_save_as_h5(os.path.join(c3d_feat_folder, folder), 'fc6-1', 'data')
-            merge_and_save_as_h5(os.path.join(c3d_feat_folder, folder), 'fc7-1', 'data')
-            count += 1
-            if count % 100 == 0:
-                print count
-    print count
+#    c3d_feat_folder = '/disk_2T/shenxu/msvd_feat_c3d/'
+#    folders = os.listdir(c3d_feat_folder)
+#    count = 0
+#    for folder in folders:
+#        if os.path.isdir(os.path.join(c3d_feat_folder, folder)):
+#            merge_and_save_as_h5(os.path.join(c3d_feat_folder, folder), 'fc6-1', 'data')
+#            merge_and_save_as_h5(os.path.join(c3d_feat_folder, folder), 'fc7-1', 'data')
+#            count += 1
+#            if count % 100 == 0:
+#                print count
+#    print count
+    build_list('/disk_2T/shenxu/msvd_feat_vgg_c3d_batch')
