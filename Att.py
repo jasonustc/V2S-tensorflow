@@ -389,14 +389,7 @@ def testing_all(sess, test_data, ixtoword, video_tf, video_mask_tf, caption_tf):
 def train():
     print 'load meta data...'
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
-    captions = meta_data['Description'].values
-    captions = map(lambda x: x.replace('.', ''), captions)
-    captions = map(lambda x: x.replace(',', ''), captions)
-    print 'build dictionary...'
-    wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions, word_count_threshold=1)
-
-    np.save('./data0/ixtoword', ixtoword)
-
+    ixtoword = np.load('./data0/wordtoix.npy').tolist()
     print 'build model and session...'
     model = Video_Caption_Generator(
             dim_image=dim_image,
@@ -429,28 +422,10 @@ def train():
 
             tStart = time.time()
             current_batch = h5py.File(train_data[current_batch_file_idx])
-            current_feats = np.zeros((batch_size, n_frame_step, dim_image))
-            current_video_masks = np.zeros((batch_size, n_frame_step))
-            current_video_len = np.zeros(batch_size)
-            for ind in xrange(batch_size):
-                current_feats[ind,:,:] = current_batch['data'][:n_frame_step,ind,:]
-                idx = np.where(current_batch['label'][:,ind] != -1)[0]
-                if len(idx) == 0:
-                    continue
-                current_video_masks[ind,:idx[-1]+1] = 1
-
-            current_captions = current_batch['title']
-            current_caption_ind = map(lambda cap: [wordtoix[word] for word in cap.lower().split(' ') if word in wordtoix], current_captions)
-
-            current_caption_matrix = sequence.pad_sequences(current_caption_ind, padding='post', maxlen=n_caption_step-1)
-            current_caption_matrix = np.hstack( [current_caption_matrix, np.zeros( [len(current_caption_matrix),1]) ] ).astype(int)
-            current_caption_masks = np.zeros((current_caption_matrix.shape[0], current_caption_matrix.shape[1]))
-            nonzeros = np.array( map(lambda x: (x != 0).sum()+1, current_caption_matrix ))
-            pdb.set_trace()
-
-            for ind, row in enumerate(current_caption_masks):
-                row[:nonzeros[ind]] = 1
-
+            current_feats = current_batch['data']
+            current_video_masks = current_batch['video_label']
+            current_caption_matrix = current_batch['caption_id']
+            current_caption_masks = current_batch['caption_label']
             pdb.set_trace()
             tEnd1 = time.time()
             print 'data processing time:', round(tEnd1 - tStart, 2), "s"
