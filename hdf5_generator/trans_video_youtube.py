@@ -5,6 +5,7 @@ import pdb
 import unicodedata
 import glob
 import os
+from keras.preprocessing import sequence
 
 feature_folder = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
 vgg_feat_folder = '/disk_2T/shenxu/msvd_feat_vgg/'
@@ -13,8 +14,12 @@ vgg_feat_name =  'fc6'
 c3d_feat_name = 'fc6'
 word_count_threshold = 1
 
-def get_cap_ids(title, wordtoix):
-    return map(lambda cap: [wordtoix[word] for word in cap.lower().split(' ') if word in wordtoix], title)
+def get_cap_ids(title, wordtoix, cap_length):
+    cap_id = [wordtoix[word] for word in title.lower().split(' ') if word in wordtoix]
+    n_words = len(cap_id) if len(cap_id) < cap_length else cap_length - 1
+    cap_id = [cap_id]
+    ## the last word must be '<END>' ###
+    return sequence.pad_sequences(cap_id, padding='post', maxlen=cap_length-1), n_words
 
 def preProBuildWordVocab(sentence_iterator, word_count_threshold=5): # borrowed this function from NeuralTalk
     print 'preprocessing word counts and creating vocab based on word count threshold %d' % (word_count_threshold, )
@@ -49,11 +54,9 @@ def build_vocab(train_set):
     re = json.load(open('msvd2sent.json'))
     train_title = []
     for video in train_set:
-        for title in re['video']:
+        for title in re[video]:
             train_title.append(title)
-    pdb.set_trace()
     wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(train_title, word_count_threshold)
-    pdb.set_trace()
     np.save('wordtoix', wordtoix)
     np.save('ixtoword', ixtoword)
     np.save('bias_init_vector', bias_init_vector)
@@ -102,15 +105,13 @@ def trans_video_youtube(datasplit_list, datasplit, vgg_feat_name,
                     vl[:concat_feat.shape[0]] = 1
                     video_label.append(vl)
                     ### caption of word ids ###
-                    ci = np.zeros([cap_length])
-                    cap_id = get_cap_ids(xxx, wordtoix)
-                    ci[:len(cap_id)] = np.array(cap_id)
-                    caption_id.append(ci)
+                    cap_id, n_words = get_cap_ids(xxx, wordtoix, cap_length)
+                    cap_id = np.hstack([cap_id, np.zeros([1,1])]).astype(int)
+                    caption_id.append(np.squeeze(cap_id))
                     ### caption labels ###
                     capl = np.zeros([cap_length])
-                    capl[:len(cap_ids)] = 1
+                    capl[:n_words + 1] = 1
                     caption_label.append(capl)
-                    pdb.set_trace()
                     cnt += 1
                     if cnt == batch_size:
                         batch = h5py.File(feature_folder + datasplit + '{:06d}'.format(initial) + '.h5','w')
@@ -134,22 +135,29 @@ def trans_video_youtube(datasplit_list, datasplit, vgg_feat_name,
             while len(fname) < batch_size:
                 fname.append('')
                 title.append('')
+            print 'data shape:', np.array(data).shape
+            print 'fname shape: ', np.array(fname).shape
+            print 'title shape: ', np.array(title).shape
+            print 'caption_id shape:', np.array(caption_id).shape
+            print 'caption_label shape: ', np.array(caption_label).shape
+            print 'video_label shape:', np.array(video_label).shape
             batch = h5py.File(feature_folder + datasplit + '{:06d}'.format(initial) + '.h5','w')
             batch['data'] = np.zeros((batch_size, n_length, 4096*2))
             batch['data'][:len(data),:,:] = np.array(data)#np.zeros((batch_size,n_length, 4096*2))
-            batch['fname'] = np.array(fname)
-            batch['title'] = np.array(title)
+            fname = np.array(fname)
+            title = np.array(title)
+            batch['fname'] = fname
+            batch['title'] = title
             batch['video_label'] = np.zeros((batch_size, n_length))
-            batch['video_label'][:len(data),:] = np.array(label) #np.zeros((batch_size, n_length))
+            batch['video_label'][:len(data),:] = np.array(video_label) #np.zeros((batch_size, n_length))
             ### caption of word ids ###
             ci = np.zeros((batch_size, cap_length))
-            ci[:len(cap_id)] = np.array(caption_id)
+            ci[:len(caption_id), :] = np.array(caption_id) #np.zeros((batch_size, caption_length))
             batch['caption_id'] = ci
             ### caption labels ###
             capl = np.zeros((batch_size, cap_length))
-            capl[:len(cap_ids), :] = caption_label
+            capl[:len(caption_label), :] = np.array(caption_label)#np.zeros((batch_size, caption_length))
             batch['caption_label'] = capl
-            pdb.set_trace()
 
 
 

@@ -446,10 +446,12 @@ def train():
             current_caption_matrix = np.hstack( [current_caption_matrix, np.zeros( [len(current_caption_matrix),1]) ] ).astype(int)
             current_caption_masks = np.zeros((current_caption_matrix.shape[0], current_caption_matrix.shape[1]))
             nonzeros = np.array( map(lambda x: (x != 0).sum()+1, current_caption_matrix ))
+            pdb.set_trace()
 
             for ind, row in enumerate(current_caption_masks):
                 row[:nonzeros[ind]] = 1
 
+            pdb.set_trace()
             tEnd1 = time.time()
             print 'data processing time:', round(tEnd1 - tStart, 2), "s"
             _, loss_val = sess.run(
