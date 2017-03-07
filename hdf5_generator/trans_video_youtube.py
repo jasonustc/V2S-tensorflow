@@ -12,6 +12,9 @@ c3d_feat_folder = '/disk_2T/shenxu/msvd_feat_c3d/'
 vgg_feat_name =  'fc6'
 c3d_feat_name = 'fc6'
 
+def get_cap_ids(title):
+    pass
+
 def trans_video_youtube(datasplit_list, datasplit, vgg_feat_name,
         c3d_feat_name):
     assert len(datasplit_list) > 0
@@ -45,21 +48,21 @@ def trans_video_youtube(datasplit_list, datasplit, vgg_feat_name,
                     fname.append(video_name)
                     title.append(unicodedata.normalize('NFKD', xxx).encode('ascii','ignore'))
                     data.append(sample_data)
-                    ll = np.zeros([n_length]) - 1
-                    ll[concat_feat.shape[0] - 1] = 0
-                    label.append(ll)
+                    vl = np.zeros([n_length])
+                    vl[:concat_feat.shape[0]] = 1
+                    video_label.append(vl)
                     cnt += 1
                     if cnt == batch_size:
                         batch = h5py.File(feature_folder + datasplit + '{:06d}'.format(initial) + '.h5','w')
                         data = np.array(data)
-                        data = np.transpose(data,(1,0,2))
-                        batch['data'] = data #np.zeros((n_length,batch_size,4096*2))
+#                        data = np.transpose(data,(1,0,2))
+                        batch['data'] = data #np.zeros((batch_size, length, 4096*2))
                         fname = np.array(fname)
                         title = np.array(title)
                         batch['fname'] = fname
                         batch['title'] = title
 #                       batch['pos'] = np.zeros(batch_size)
-                        batch['label'] = np.transpose(np.array(label)) # np.zeros((n_length,batch_size))
+                        batch['video_label'] = np.array(video_label) # np.zeros((batch_size, length))
                         fname = []
                         title = []
                         label = []

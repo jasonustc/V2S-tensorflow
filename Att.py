@@ -389,13 +389,11 @@ def testing_all(sess, test_data, ixtoword, video_tf, video_mask_tf, caption_tf):
 def train():
     print 'load meta data...'
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
-    pdb.set_trace()
     captions = meta_data['Description'].values
     captions = map(lambda x: x.replace('.', ''), captions)
     captions = map(lambda x: x.replace(',', ''), captions)
     print 'build dictionary...'
     wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions, word_count_threshold=1)
-    pdb.set_trace()
 
     np.save('./data0/ixtoword', ixtoword)
 
@@ -452,6 +450,8 @@ def train():
             for ind, row in enumerate(current_caption_masks):
                 row[:nonzeros[ind]] = 1
 
+            tEnd1 = time.time()
+            print 'data processing time:', round(tEnd1 - tStart, 2), "s"
             _, loss_val = sess.run(
                     [train_op, tf_loss],
                     feed_dict={
@@ -462,6 +462,7 @@ def train():
                         })
             loss_epoch[current_batch_file_idx] = loss_val
             tStop = time.time()
+            print 'running time:', round(tStop - tEnd1, 2), "s"
             print "Epoch:", epoch, " Batch:", current_batch_file_idx, " Loss:", loss_val
             print "Time Cost:", round(tStop - tStart,2), "s"
 
