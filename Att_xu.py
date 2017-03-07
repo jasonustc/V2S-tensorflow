@@ -421,7 +421,7 @@ def train():
 #    captions = map(lambda x: x.replace('.', ''), captions)
 #    captions = map(lambda x: x.replace(',', ''), captions)
 #    wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(captions, word_count_threshold=1)
-    ixtoword = pd.Series(np.load('./data0/ixtoword.npy').tolist())
+    ixtoword = pd.Series(np.load('./test_data/ixtoword.npy').tolist())
     bias_init_vector = get_bias_init_vector(video_data_path_train)
 
     model = Video_Caption_Generator(
@@ -541,12 +541,12 @@ def test(model_path='models/model-900', video_feat_path=video_feat_path):
     with tf.device("/cpu:0"):
         saver = tf.train.Saver()
         saver.restore(sess, model_path)
-    
+
     for ind, row in enumerate(lstm3_variables_tf):
         if ind % 4 == 0:
                 assign_op = row.assign(tf.mul(row,1-0.5))
                 sess.run(assign_op)
-    
+
     [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, test_data, ixtoword,video_tf, video_mask_tf, caption_tf)
     #np.savez('Att_result/'+model_path.split('/')[1],gt = gt_sent,pred=pred_sent)
     scorer = COCOScorer()
