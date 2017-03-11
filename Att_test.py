@@ -11,7 +11,7 @@ from collections import defaultdict
 from keras.preprocessing import sequence
 from cocoeval import COCOScorer
 import unicodedata
-from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
+gpu_id = 1
 
 def parse_args():
     """
@@ -234,7 +234,7 @@ def get_video_data_HL(video_data_path, video_feat_path):
     List = []
     for ele in files:
         List.append(ele[:-1])
-    return np.asarray(List)
+    return np.array(List)
 
 def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test):
     video_list_train = get_video_data_HL(video_data_path_train, video_feat_path)
@@ -268,9 +268,9 @@ def get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_
                 fname.append(batch_fname[i])
                 title.append(batch_title[i])
 
-#    fname = fname
-#    title = title
-#    train_title = train_title
+    fname = np.array(fname)
+    title = np.array(title)
+    train_title = np.array(train_title)
     video_data = pd.DataFrame({'Description':train_title})
 
     return video_data, video_list_train, video_list_val, video_list_test
@@ -298,7 +298,7 @@ def preProBuildWordVocab(sentence_iterator, word_count_threshold=5): # borrowed 
         ix += 1
 
     word_counts['.'] = nsents
-    bias_init_vector = np.asarray([1.0*word_counts[ixtoword[i]] for i in ixtoword])
+    bias_init_vector = np.array([1.0*word_counts[ixtoword[i]] for i in ixtoword])
     bias_init_vector /= np.sum(bias_init_vector) # normalize to frequencies
     bias_init_vector = np.log(bias_init_vector)
     bias_init_vector -= np.max(bias_init_vector) # shift to nice numeric range
@@ -335,7 +335,7 @@ def testing_one(sess, video_feat_path, ixtoword, video_tf, video_mask_tf, captio
             break
         else:
             generated_words = ixtoword[generated_word_index[ind]]
-            punctuation = np.argmax(np.asarray(generated_words) == '.')+1
+            punctuation = np.argmax(np.array(generated_words) == '.')+1
             generated_words = generated_words[:punctuation]
             #ipdb.set_trace()
             generated_sentence = ' '.join(generated_words)
@@ -380,7 +380,9 @@ def testing_all(sess, test_data, ixtoword, video_tf, video_mask_tf, caption_tf):
 
 def train():
     print 'load meta data...'
-    meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
+    with tf.device("/cpu:1"):
+        meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train,
+                video_data_path_val, video_data_path_test)
     wordtoix = np.load('./data0/wordtoix.npy').tolist()
     print 'build model and session...'
     model = Video_Caption_Generator(
@@ -392,29 +394,19 @@ def train():
             drop_out_rate = 0.5,
             bias_init_vector=None)
 
-    ## GPU configurations
-    gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=0.4)
     tf_loss, tf_video, tf_video_mask, tf_caption, tf_caption_mask= model.build_model()
-    sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True,
-        log_device_placement=False, gpu_options=gpu_options))
-    # check for model file
+    sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True))
+
     with tf.device("/cpu:0"):
         saver = tf.train.Saver(max_to_keep=100)
-    ckpt = tf.train.get_checkpoint_state(model_path)
-    if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
-        print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
-        saver.restore(sess, ckpt.model_checkpoint_path)
-        print_tensors_in_checkpoint_file(ckpt.model_checkpoint_path, "", True)
-    else:
-        print("Created model with fresh parameters.")
-        sess.run(tf.global_variables_initializer())
-    ## initialize variables added for optimizer
-    temp = set(tf.global_variables())
     train_op = tf.train.AdamOptimizer(learning_rate).minimize(tf_loss)
-    sess.run(tf.variables_initializer(set(tf.global_variables()) - temp))
+#    tf.initialize_all_variables().run()
+    init_op = tf.global_variables_initializer()
+    sess.run(init_op)
 
     print 'train...'
     tStart_total = time.time()
+    pdb.set_trace()
     for epoch in range(n_epochs):
         index = np.arange(len(train_data))
         np.random.shuffle(index)
@@ -424,13 +416,16 @@ def train():
         loss_epoch = np.zeros(len(train_data))
         trained_batch = 0
         for current_batch_file_idx in xrange(len(train_data)):
+#        for current_batch_file_idx in xrange(2):
             tStart = time.time()
-            current_batch = h5py.File(train_data[current_batch_file_idx])
-            current_feats = current_batch['data']
-            current_video_masks = current_batch['video_label']
-            current_caption_matrix = current_batch['caption_id']
-            current_caption_masks = current_batch['caption_label']
+            with tf.device("/cpu:1"):
+                current_batch = h5py.File(train_data[current_batch_file_idx])
+                current_feats = np.array(current_batch['data'])
+                current_video_masks = np.array(current_batch['video_label'])
+                current_caption_matrix = np.array(current_batch['caption_id'])
+                current_caption_masks = np.array(current_batch['caption_label'])
             tEnd1 = time.time()
+            print 'data processing time:', round(tEnd1 - tStart, 2), "s"
             _, loss_val = sess.run(
                     [train_op, tf_loss],
                     feed_dict={
@@ -441,6 +436,7 @@ def train():
                         })
             loss_epoch[current_batch_file_idx] = loss_val
             tStop = time.time()
+            print 'running time:', round(tStop - tEnd1, 2), "s"
             print "Epoch:", epoch, " Batch:", current_batch_file_idx, " Loss:", loss_val
             print "Time Cost:", round(tStop - tStart,2), "s"
 
@@ -508,9 +504,7 @@ def test(model_path='models/model-900', video_feat_path=video_feat_path):
 if __name__ == '__main__':
     args = parse_args()
     if args.task == 'train':
-        with tf.device('/gpu:'+str(args.gpu_id)):
-            print 'using gpu:', args.gpu_id
+        with tf.device("/gpu:0"):
             train()
     elif args.task == 'test':
-        with tf.device('/gpu:'+str(args.gpu_id)):
-            total_score = test(model_path = args.model)
+        total_score = test(model_path = args.model)
