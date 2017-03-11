@@ -3,3 +3,5 @@
 models/
 pycocoevalcap/meteor/*.pyc
 test_data/
+log/
+*.log
