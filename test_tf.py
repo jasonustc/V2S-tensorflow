@@ -1,12 +1,40 @@
 #! /usr/bin/env python
 import tensorflow as tf
+import numpy as np
+import h5py
+import os
+import pdb
 
-a = tf.Variable(tf.random_uniform([5, 2, 3], -1, 1), name='a')
-b = tf.Variable(tf.random_uniform([3, 3], -1, 1), name='b')
-c = tf.scan(lambda c, x: tf.matmul(x, b), a)
-with tf.device("/cpu:0"):
-    sess = tf.InteractiveSession()
-tf.initialize_all_variables().run()
-print sess.run(c)
+def fake_hdf5_data(data_folder):
+	assert os.path.isdir(data_folder)
+	data = np.zeros((100, 45, 8192), dtype=np.float)
+	title = np.array(['this is a video name' for i in xrange(100)])
+	pdb.set_trace()
+	caption_id = np.array([i * 3 for i in xrange(100)])
+	video_label = np.ones((100, 45), dtype=np.float)
+	caption_label = np.ones((100, 35), dtype=np.float)
+	paths = []
+	for i in xrange(20):
+		name = 'video' + str(i) + '.h5'
+		batch = h5py.File(name, 'w')
+		batch['data'] = data
+		batch['title'] = title
+		batch['caption_id'] = caption_id
+		batch['caption_label'] = caption_label
+		batch['video_label'] = video_label
+		paths.append(name)
+	index = h5py.File('index.h5', 'w')
+	index['names'] = np.array(paths)
+
+fake_hdf5_data('fake_data')
+
+
+#a = tf.Variable(tf.random_uniform([5, 2, 3], -1, 1), name='a')
+#b = tf.Variable(tf.random_uniform([3, 3], -1, 1), name='b')
+#c = tf.scan(lambda c, x: tf.matmul(x, b), a)
+#with tf.device("/cpu:0"):
+#    sess = tf.InteractiveSession()
+#tf.initialize_all_variables().run()
+#print sess.run(c)
 
 

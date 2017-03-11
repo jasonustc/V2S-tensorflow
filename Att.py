@@ -8,7 +8,7 @@ import time
 import json
 from collections import defaultdict
 #from tensorflow.models.rnn import rnn, rnn_cell
-from keras.preprocessing import sequence
+#from keras.preprocessing import sequence
 from cocoeval import COCOScorer
 import unicodedata
 gpu_id = 5
@@ -388,8 +388,11 @@ def testing_all(sess, test_data, ixtoword, video_tf, video_mask_tf, caption_tf):
 
 def train():
     print 'load meta data...'
-    meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
-    ixtoword = np.load('./data0/wordtoix.npy').tolist()
+    #meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
+    train_data = h5py.File('index.h5')
+    train_data = np.array(train_data['names'])
+    ixtoword = []    
+    wordtoix = []
     print 'build model and session...'
     model = Video_Caption_Generator(
             dim_image=dim_image,
@@ -421,14 +424,21 @@ def train():
         for current_batch_file_idx in xrange(len(train_data)):
 
             tStart = time.time()
-            current_batch = h5py.File(train_data[current_batch_file_idx])
+            h5_batch = train_data[current_batch_file_idx]
+#            h5_batch = 'video10.h5'
+            tEnd1 = time.time()
+            print 'indexing time:', round(tEnd1 - tStart, 2), "s"
+            current_batch = h5py.File(h5_batch)
+            tEnd2 = time.time()
+            print 'data processing time:', round(tEnd2 - tStart, 2), "s"
+#            current_batch = h5py.File('video10.h5')
             current_feats = current_batch['data']
             current_video_masks = current_batch['video_label']
             current_caption_matrix = current_batch['caption_id']
             current_caption_masks = current_batch['caption_label']
+            tEnd3 = time.time()
+            print 'data fetching time:', round(tEnd3 - tStart, 2), "s"
             pdb.set_trace()
-            tEnd1 = time.time()
-            print 'data processing time:', round(tEnd1 - tStart, 2), "s"
             _, loss_val = sess.run(
                     [train_op, tf_loss],
                     feed_dict={
@@ -507,8 +517,7 @@ def test(model_path='models/model-900', video_feat_path=video_feat_path):
 if __name__ == '__main__':
     args = parse_args()
     if args.task == 'train':
-        with tf.device('/gpu:'+str(gpu_id)):
-            train()
+        train()
     elif args.task == 'test':
         with tf.device('/gpu:'+str(gpu_id)):
             total_score = test(model_path = args.model)
