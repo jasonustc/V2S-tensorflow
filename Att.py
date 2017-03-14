@@ -8,7 +8,7 @@ import time
 import json
 from collections import defaultdict
 #from tensorflow.models.rnn import rnn, rnn_cell
-from keras.preprocessing import sequence
+#from keras.preprocessing import sequence
 from cocoeval import COCOScorer
 import unicodedata
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
@@ -425,7 +425,14 @@ def train():
         trained_batch = 0
         for current_batch_file_idx in xrange(len(train_data)):
             tStart = time.time()
-            current_batch = h5py.File(train_data[current_batch_file_idx])
+            h5_batch = train_data[current_batch_file_idx]
+#            h5_batch = 'video10.h5'
+            tEnd1 = time.time()
+            print 'indexing time:', round(tEnd1 - tStart, 2), "s"
+            current_batch = h5py.File(h5_batch)
+            tEnd2 = time.time()
+            print 'data processing time:', round(tEnd2 - tStart, 2), "s"
+#            current_batch = h5py.File('video10.h5')
             current_feats = current_batch['data']
             current_video_masks = current_batch['video_label']
             current_caption_matrix = current_batch['caption_id']
