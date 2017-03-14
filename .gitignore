@@ -2,6 +2,7 @@
 *.pyc
 models/
 pycocoevalcap/meteor/*.pyc
-test_data/
+data0/
 log/
 *.log
+*.h5

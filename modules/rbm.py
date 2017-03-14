@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import pandas as pd
+import pdb
 
 
 class RBM(object):
@@ -8,14 +9,16 @@ class RBM(object):
 		The TF implementation of Restricted Boltzmann Machine
 	"""
 
-	def __init__(self, num_visible, num_hidden, gibbs_steps=1, learning_rate=0.01):
+	def __init__(self, num_visible, num_hidden, gibbs_steps=1, learning_rate=0.01,
+		use_supervise = True):
 		self.num_visible = num_visible
 		self.num_hidden = num_hidden
-		self.gibbs_steps = gibbs_sampling_steps
+		self.gibbs_steps = gibbs_steps
 		self.learning_rate = learning_rate
-		self.W = tf.Variable(tf.random_uniform([num_visible, num_hidden], -0.1, 0.1), name = 'rbm_W')
-		self.bv = tf.Variable(tf.zeros([num_visible]), name = 'rbm_bv')
-		self.bh = tf.Variable(tf.zeros([num_hidden]), name = 'rbm_bh')
+		self.use_supervise = use_supervise
+		self.W = tf.Variable(tf.random_uniform([num_visible, num_hidden], -0.1, 0.1), name = 'rbm/W')
+		self.bv = tf.Variable(tf.zeros([num_visible]), name = 'rbm/bv')
+		self.bh = tf.Variable(tf.zeros([num_hidden]), name = 'rbm/bh')
 
 	def sample(self, probs):
 		#takes in a vector of probabilities, and return a random vector of 0s and 1s
@@ -27,28 +30,29 @@ class RBM(object):
 		def gibbs_step(count, xk):
 			# Returns a single gibbs step. The visible values are initialized to xk
 			hk = self.sample(tf.sigmoid(tf.nn.xw_plus_b(xk, self.W, self.bh)))#propagate up
-			xk = self.sample(tf.sigmoid(tf.nn.xw_plus_b(hk, tf.transpose(self.W), self.bh)))
+			xk = self.sample(tf.sigmoid(tf.nn.xw_plus_b(hk, tf.transpose(self.W), self.bv)))
 			return count + 1, xk
 		# Run gibbs steps for k iterations
 		ct = tf.constant(0) #counter
 		# back propagation is not allowed for this loop
-		[_, _, x_sample] = tf.while_loop(ct < self.gibbs_steps, 
-			[ct, tf.constant(self.gibbs_steps), x], back_prop = False)
+		[_, x_sample] = tf.while_loop(lambda c, xx: c < self.gibbs_steps, 
+			gibbs_step, [ct, x], back_prop = False)
 		# stop tensorflow from propagating gradients back through the gibbs step
-		x_sample = tf.stop_gradients(x_sample)
+		x_sample = tf.stop_gradient(x_sample) # b x d
 		return x_sample
 
 	def get_free_energy_cost(self, x):
 		# we use this loss in training to get the cost of RBM.
 		# draw a sample from the RBM
-		x_sample = self.gibbs_sample(x)
+		x_sample = self.gibbs_sample(x) # b x d
 
 		def F(xx):
 			# The function computes the free energy of the visible input
-			return -tf.reduce_sum(tf.log(1 + tf.exp(tf.nn.xw_plus_b(xx, self.W, self.bh))), axis=1))) - 
-				tf.matmul(xx, self.bv, transpose_b = True)
+			# F(v) = -a^T v - \sum_j log(1 + exp(b + W^T v))
+			return -tf.reduce_sum(tf.log(1 + tf.exp(tf.nn.xw_plus_b(xx, self.W, self.bh))), axis=1) \
+				- tf.matmul(xx, tf.expand_dims(self.bv, 1)) # b x 1
 		## the cost is based on the difference in free energy between x and x_sample
-		cost = tf.reduce_mean(tf.sub(F(x), F(x_sample)))
+		cost = tf.reduce_mean(tf.subtract(F(x), F(x_sample))) # 1
 		return cost
 
 	def get_cd_update(self, x):
@@ -78,7 +82,12 @@ class RBM(object):
 		return update
 
 	def __call__(self, x):
-		return tf.sigmoid(tf.nn.xw_plus_b(x, self.W, bv))
+		free_energy_cost = self.get_free_energy_cost(x)
+		output = tf.sigmoid(tf.nn.xw_plus_b(x, self.W, self.bh)) 
+		if not self.use_supervise:
+			# stop gradients from output, to train RBM in a totally unsupervised way
+			output = tf.stop_gradient(output)
+		return free_energy_cost, output
 
 
 
