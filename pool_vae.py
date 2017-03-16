@@ -65,10 +65,8 @@ class Video_Caption_Generator():
         self.lstm2_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm2,output_keep_prob=1 - self.drop_out_rate)
         self.lstm3_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm3,output_keep_prob=1 - self.drop_out_rate)
 
-        self.rbm = RBM(self.dim_hidden * 2, self.dim_hidden, gibbs_steps = 10)
+        self.rbm = RBM(self.dim_hidden + self.dim_image, self.dim_hidden, gibbs_steps = 10)
 
-        self.encode_image_W = tf.Variable(tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1),name='encode_image_W')
-        self.encode_image_b = tf.Variable(tf.zeros([dim_hidden]), name='encode_image_b')
         self.decode_image_W = tf.Variable(tf.random_uniform([dim_hidden, dim_image], -0.1, 0.1, name='decode_image_W'))
         self.decode_image_b = tf.Variable(tf.random_uniform([dim_image]), name='decode_image_b')
 
@@ -93,10 +91,9 @@ class Video_Caption_Generator():
 
         ######## Encoding Stage #########
         # encoding video
-        # mean pooling
-        embed_video = tf.reduce_sum(video, axis=1) # b x d_im
-        # embedding into (0, 1) range
-        output1 = tf.sigmoid(tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b)) # b x h
+        with tf.variable_scope("model") as scope:
+            # mean pooling
+            output1 = tf.reduce_sum(video, axis=1) # b x d_im
         # encoding sentence
         with tf.variable_scope("model") as scope:
             for i in xrange(self.n_caption_steps):
@@ -156,7 +153,7 @@ class Video_Caption_Generator():
 
         ## decoding video without attention
         decode_image = tf.nn.xw_plus_b(output_semantic, self.decode_image_W, self.decode_image_b) # b x d_im
-        euclid_loss = tf.reduce_sum(tf.square(tf.subtract(decode_image, embed_video))) # 1
+        euclid_loss = tf.reduce_sum(tf.square(tf.subtract(decode_image, output1))) # 1
         euclid_loss = euclid_loss / self.batch_size # 1
         loss_video += tf.reduce_sum(euclid_loss) # 1
 
@@ -173,9 +170,7 @@ class Video_Caption_Generator():
 
         ####### Encoding Video ##########
         # encoding video
-        embed_video = tf.reduce_sum(video, axis=1) # b x d_im
-        # embedding into (0, 1) range
-        output1 = tf.sigmoid(tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b)) # b x h
+        output1 = tf.reduce_sum(video, axis=1) # b x d_im
         ####### Encoding Video ##########
 
         ####### Semantic Mapping ########
@@ -223,7 +218,7 @@ class Video_Caption_Generator():
         ####### Encoding Sentence ##########
 
         ####### Semantic Mapping ########
-        output1 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
+        output1 = tf.zeros([self.batch_size, self.dim_image]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.rbm(input_state)
         ####### Semantic Mapping ########
@@ -511,12 +506,13 @@ def train():
         tStop_epoch = time.time()
         print "Epoch Time Cost:", round(tStop_epoch - tStart_epoch,2), "s"
 
-        if np.mod(epoch, 1) == 0 or epoch == n_epochs - 1:
+        continue
+
+        if np.mod(epoch, 100) == 0 or epoch == n_epochs - 1:
             print "Epoch ", epoch, " is done. Saving the model ..."
             with tf.device("/cpu:0"):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
 
-            continue
             ######### test sentence generation ##########
             current_batch = h5py.File(val_data[np.random.randint(0,len(val_data))])
             video_tf, video_mask_tf, caption_tf, lstm3_variables_tf = model.build_generator()
