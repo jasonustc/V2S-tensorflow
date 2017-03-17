@@ -163,7 +163,7 @@ class Video_Caption_Generator():
         loss_caption = loss_caption / tf.reduce_sum(caption_mask)
         loss_video = loss_video / tf.reduce_sum(video_mask)
 
-        loss = loss_caption + loss_video
+        loss = loss_caption + loss_video + 0.0001 * free_energy_cost
         return loss, loss_caption, free_energy_cost, loss_video, video, video_mask, caption, caption_mask
 
 
@@ -241,8 +241,10 @@ video_data_path_test = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/test_vn.txt'
 # seems to be no use
 video_feat_path = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
 
-model_path = '/Users/shenxu/Code/V2S-tensorflow/data0/'
-test_data_folder = '/Users/shenxu/Code/V2S-tensorflow/data0/'
+#model_path = '/Users/shenxu/Code/V2S-tensorflow/data0/'
+model_path = '/home/shenxu/V2S-tensorflow/Att_baseline/test_models/'
+#test_data_folder = '/Users/shenxu/Code/V2S-tensorflow/data0/'
+test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
 
 ############## Train Parameters #################
 dim_image = 4096*2
