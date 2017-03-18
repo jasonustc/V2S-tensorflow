@@ -7,3 +7,7 @@ test_data/
 *.pbs
 *.sh
 *cluster.py
+data0/
+log/
+*.log
+*.h5
