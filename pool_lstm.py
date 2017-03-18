@@ -175,8 +175,10 @@ video_data_path_test = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/test_vn.txt'
 # seems to be no use
 video_feat_path = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
 
-model_path = '/Users/shenxu/Code/V2S-tensorflow/data0/models/'
-test_data_folder = '/Users/shenxu/Code/V2S-tensorflow/data0/'
+#model_path = '/Users/shenxu/Code/V2S-tensorflow/data0/models/'
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_lstm/'
+#test_data_folder = '/Users/shenxu/Code/V2S-tensorflow/data0/'
+test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
 
 ############## Train Parameters #################
 dim_image = 4096*2
@@ -356,11 +358,11 @@ def testing_all(sess, test_data, ixtoword, video_tf, video_mask_tf, caption_tf):
 
 def train():
     print 'load meta data...'
-#    meta_data, train_data, val_data, test_data = 
-#        get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
+    meta_data, train_data, val_data, test_data = \
+        get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
     wordtoix = np.load('./data0/wordtoix.npy').tolist()
-    train_data = np.asarray([test_data_folder + 'train000000.h5', test_data_folder + 'train000001.h5'])
-    val_data = np.asarray([test_data_folder + 'train000002.h5'])
+#    train_data = np.asarray([test_data_folder + 'train000000.h5', test_data_folder + 'train000001.h5'])
+#    val_data = np.asarray([test_data_folder + 'train000002.h5'])
     print 'build model and session...'
     model = Video_Caption_Generator(
             dim_image=dim_image,
@@ -437,18 +439,18 @@ def train():
             current_batch = h5py.File(val_data[np.random.randint(0,len(val_data))])
             video_tf, video_mask_tf, caption_tf, lstm3_variables_tf = model.build_generator()
             ixtoword = pd.Series(np.load('./data0/ixtoword.npy').tolist())
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, train_data[-2:], 
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, train_data[-2:],
                 ixtoword, video_tf, video_mask_tf, caption_tf)
             for key in pred_dict.keys():
                 for ele in gt_dict[key]:
                     print "GT:  " + ele['caption']
                 print "PD:  " + pred_dict[key][0]['caption']
                 print '-------'
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, val_data, 
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, val_data,
                 ixtoword,video_tf, video_mask_tf, caption_tf)
             scorer = COCOScorer()
-            pdb.set_trace()
             total_score = scorer.score(gt_dict, pred_dict, id_list)
+            sys.stdout.flush()
 
         sys.stdout.flush()
 
