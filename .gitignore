@@ -2,6 +2,11 @@
 *.pyc
 models/
 pycocoevalcap/meteor/*.pyc
+test_data/
+*.log
+*.pbs
+*.sh
+*cluster.py
 data0/
 log/
 *.log
