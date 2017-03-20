@@ -114,19 +114,21 @@ class Video_Caption_Generator():
 
         ######## Encoding Stage #########
         # encoding video
-        with tf.variable_scope("model") as scope:
-            for i in xrange(self.n_video_steps):
-                if i > 0: scope.reuse_variables()
-                with tf.variable_scope("LSTM1"):
-                   output1, state1 = self.lstm1_dropout(video[:, i, :], state1) # b x s0
-        with tf.variable_scope("model") as scope:
-        # encoding sentence
-            for i in xrange(self.n_caption_steps):
-                if i > 0: scope.reuse_variables()
-                with tf.variable_scope("LSTM2"):
-                    with tf.device("/cpu:0"):
-                        current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
-                    output2, state2 = self.lstm2_dropout(current_embed, state2) # b x h
+        with tf.device("/gpu:0"):
+            with tf.variable_scope("model") as scope:
+                for i in xrange(self.n_video_steps):
+                    if i > 0: scope.reuse_variables()
+                    with tf.variable_scope("LSTM1"):
+                       output1, state1 = self.lstm1_dropout(video[:, i, :], state1) # b x s0
+        with tf.device("/gpu:1"):
+            with tf.variable_scope("model") as scope:
+            # encoding sentence
+                for i in xrange(self.n_caption_steps):
+                    if i > 0: scope.reuse_variables()
+                    with tf.variable_scope("LSTM2"):
+                        with tf.device("/cpu:0"):
+                            current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
+                        output2, state2 = self.lstm2_dropout(current_embed, state2) # b x h
         ######## Encoding Stage #########
 
         ######## Dropout Stage #########
@@ -163,56 +165,58 @@ class Video_Caption_Generator():
         image_part = tf.matmul(image_part, self.embed_att_Ua) + self.embed_att_ba
         image_part = tf.reshape(image_part, [self.n_video_steps, self.batch_size, self.dim_hidden])
         ## decoding sentence with attention
-        with tf.variable_scope("model") as scope:
-            for i in xrange(n_caption_steps):
-                e = tf.tanh(tf.matmul(sent_prev, self.embed_att_Wa) + image_part) # n x b x h
-                e = tf.reshape(e, [-1, self.dim_hidden])
-                e = tf.matmul(e, self.embed_att_w) # n x b
-                e = tf.reshape(e, [self.n_video_steps, self.batch_size])
-    #            e = tf.reduce_sum(e,2) # n x b
-                e_hat_exp = tf.multiply(tf.transpose(video_mask), tf.exp(e)) # n x b 
-                denomin = tf.reduce_sum(e_hat_exp,0) # b
-                denomin = denomin + tf.to_float(tf.equal(denomin, 0))   # regularize denominator
-                alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h  # normalize to obtain alpha
-                attention_list = tf.multiply(alphas, image_emb) # n x b x h
-                atten = tf.reduce_sum(attention_list,0) # b x h       #  soft-attention weighted sum
-                if i > 0: scope.reuse_variables()
+        with tf.device("/gpu:0"):
+            with tf.variable_scope("model") as scope:
+                for i in xrange(n_caption_steps):
+                    e = tf.tanh(tf.matmul(sent_prev, self.embed_att_Wa) + image_part) # n x b x h
+                    e = tf.reshape(e, [-1, self.dim_hidden])
+                    e = tf.matmul(e, self.embed_att_w) # n x b
+                    e = tf.reshape(e, [self.n_video_steps, self.batch_size])
+        #            e = tf.reduce_sum(e,2) # n x b
+                    e_hat_exp = tf.multiply(tf.transpose(video_mask), tf.exp(e)) # n x b 
+                    denomin = tf.reduce_sum(e_hat_exp,0) # b
+                    denomin = denomin + tf.to_float(tf.equal(denomin, 0))   # regularize denominator
+                    alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h  # normalize to obtain alpha
+                    attention_list = tf.multiply(alphas, image_emb) # n x b x h
+                    atten = tf.reduce_sum(attention_list,0) # b x h       #  soft-attention weighted sum
+                    if i > 0: scope.reuse_variables()
 
-                with tf.variable_scope("LSTM3"):
-                    output3, state3 = self.lstm3_dropout(tf.concat([atten, current_embed], 1), state3) # b x h
+                    with tf.variable_scope("LSTM3"):
+                        output3, state3 = self.lstm3_dropout(tf.concat([atten, current_embed], 1), state3) # b x h
 
-                output3_2 = tf.tanh(tf.nn.xw_plus_b(tf.concat([output3,atten,current_embed], 1), 
-                    self.embed_nn_Wp, self.embed_nn_bp)) # b x h
-                sent_prev = output3 # b x h
-                labels = tf.expand_dims(caption[:,i], 1) # b x 1
-                indices = tf.expand_dims(tf.range(0, self.batch_size, 1), 1) # b x 1
-                concated = tf.concat([indices, labels], 1) # b x 2
-                onehot_labels = tf.sparse_to_dense(concated, tf.stack([self.batch_size, self.n_words]), 1.0, 0.0) # b x w
-                with tf.device("/cpu:0"):
-                    current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
+                    output3_2 = tf.tanh(tf.nn.xw_plus_b(tf.concat([output3,atten,current_embed], 1), 
+                        self.embed_nn_Wp, self.embed_nn_bp)) # b x h
+                    sent_prev = output3 # b x h
+                    labels = tf.expand_dims(caption[:,i], 1) # b x 1
+                    indices = tf.expand_dims(tf.range(0, self.batch_size, 1), 1) # b x 1
+                    concated = tf.concat([indices, labels], 1) # b x 2
+                    onehot_labels = tf.sparse_to_dense(concated, tf.stack([self.batch_size, self.n_words]), 1.0, 0.0) # b x w
+                    with tf.device("/cpu:0"):
+                        current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
 
-                logit_words = tf.nn.xw_plus_b(output3_2, self.embed_word_W, self.embed_word_b) # b x w
-                cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits = logit_words, 
-                    labels = onehot_labels) # b x 1
-                cross_entropy = cross_entropy * caption_mask[:,i] # b x 1
-                loss_caption += tf.reduce_sum(cross_entropy) # 1
+                    logit_words = tf.nn.xw_plus_b(output3_2, self.embed_word_W, self.embed_word_b) # b x w
+                    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits = logit_words, 
+                        labels = onehot_labels) # b x 1
+                    cross_entropy = cross_entropy * caption_mask[:,i] # b x 1
+                    loss_caption += tf.reduce_sum(cross_entropy) # 1
 
-        ## decoding video with attention
-        with tf.variable_scope("model") as scope:
-            ## TODO: add attention for video decoding
-            for i in xrange(n_video_steps):
-                if i > 0: scope.reuse_variables()
-                with tf.variable_scope("LSTM4"):
-                    output4, state4 = self.lstm4_dropout(video_prev, state4)
-                video_prev = tf.nn.xw_plus_b(output4, self.decode_image_W, self.decode_image_b) # b x d_im
-                euclid_loss = tf.reduce_sum(tf.square(tf.subtract(video_prev, video[:,i,:])), axis=1, keep_dims=True) # b x 1 
-                euclid_loss = euclid_loss * video_mask[:, i] # b x 1
-                loss_video += tf.reduce_sum(euclid_loss) # 1
+        with tf.device("/gpu:1"):
+            ## decoding video with attention
+            with tf.variable_scope("model") as scope:
+                ## TODO: add attention for video decoding
+                for i in xrange(n_video_steps):
+                    if i > 0: scope.reuse_variables()
+                    with tf.variable_scope("LSTM4"):
+                        output4, state4 = self.lstm4_dropout(video_prev, state4)
+                    video_prev = tf.nn.xw_plus_b(output4, self.decode_image_W, self.decode_image_b) # b x d_im
+                    euclid_loss = tf.reduce_sum(tf.square(tf.subtract(video_prev, video[:,i,:])), axis=1, keep_dims=True) # b x 1 
+                    euclid_loss = euclid_loss * video_mask[:, i] # b x 1
+                    loss_video += tf.reduce_sum(euclid_loss) # 1
 
-        loss_caption = loss_caption / tf.reduce_sum(caption_mask)
-        loss_video = loss_video / tf.reduce_sum(video_mask)
+            loss_caption = loss_caption / tf.reduce_sum(caption_mask)
+            loss_video = loss_video / tf.reduce_sum(video_mask)
 
-        loss = loss_caption + free_energy_cost + loss_video
+            loss = loss_caption + free_energy_cost + loss_video
         return loss, video, video_mask, caption, caption_mask
 
 
@@ -335,7 +339,9 @@ video_data_path_val = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/val_vn.txt'
 video_data_path_test = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/test_vn.txt'
 # seems to be no use
 video_feat_path = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
-model_path = '/home/shenxu/V2S-tensorflow/Att_baseline/models'
+model_path = '/home/shenxu/V2S-tensorflow/Att_baseline/models/Att_rbm'
+#test_data_folder = '/Users/shenxu/Code/V2S-tensorflow/data0/'
+test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
 
 ############## Train Parameters #################
 dim_image = 4096*2
@@ -343,8 +349,8 @@ dim_hidden= 512*2
 n_video_steps = 45
 n_caption_steps = 35
 n_epochs = 200
-batch_size = 100
-learning_rate = 0.0001 
+batch_size = 1
+learning_rate = 0.0001
 ##################################################
 
 def get_video_data(video_data_path, video_feat_path, train_ratio=0.9):
@@ -527,10 +533,10 @@ def test_all_videos(sess, test_data, sent_tf, sent_mask_tf, gen_video_tf):
 
 def train():
     print 'load meta data...'
-#    meta_data, train_data, val_data, test_data = 
+#    meta_data, train_data, val_data, test_data = \
 #        get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
-    train_data = h5py.File('index.h5')
-    train_data = np.asarray(train_data['names'])
+    train_data = np.asarray([test_data_folder + 'train000000.h5', test_data_folder + 'train000001.h5'])
+    val_data = np.asarray([test_data_folder + 'train000002.h5'])
     wordtoix = np.load('./data0/wordtoix.npy').tolist()
     print 'build model and session...'
     model = Video_Caption_Generator(
@@ -544,10 +550,11 @@ def train():
             bias_init_vector=None)
 
     ## GPU configurations
-    gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=0.6)
+#    gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=0.6)
+    gpu_options = tf.GPUOptions(allow_growth=True)
     tf_loss, tf_video, tf_video_mask, tf_caption, tf_caption_mask= model.build_model('keep', 'keep')
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True,
-        log_device_placement=False, gpu_options=gpu_options))
+        log_device_placement=True, gpu_options=gpu_options))
     # check for model file
     with tf.device("/cpu:0"):
         saver = tf.train.Saver(max_to_keep=100)
@@ -589,15 +596,18 @@ def train():
             current_caption_matrix = np.asarray(current_batch['caption_id'])
             current_caption_masks = np.asarray(current_batch['caption_label'])
             tEnd1 = time.time()
-            _, loss_val = sess.run(
-                    [train_op, tf_loss],
-                    feed_dict={
-                        tf_video: current_feats,
-                        tf_video_mask : current_video_masks,
-                        tf_caption: current_caption_matrix,
-                        tf_caption_mask: current_caption_masks
-                        })
-            loss_epoch[current_batch_file_idx] = loss_val
+            current_loss = 0
+            for i in xrange(10):
+                _, loss_val = sess.run(
+                        [train_op, tf_loss],
+                        feed_dict={
+                            tf_video: current_feats[i*1:(i+1)*1],
+                            tf_video_mask : current_video_masks[i*1:(i+1)*1],
+                            tf_caption: current_caption_matrix[i*1:(i+1)*1],
+                            tf_caption_mask: current_caption_masks[i*1:(i+1)*1]
+                            })
+                current_loss += loss_val
+            loss_epoch[current_batch_file_idx] = current / 10.
             pdb.set_trace()
             tStop = time.time()
             print "Epoch:", epoch, " Batch:", current_batch_file_idx, " Loss:", loss_val

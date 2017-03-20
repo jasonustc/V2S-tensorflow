@@ -65,8 +65,6 @@ class Video_Caption_Generator():
         self.lstm2_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm2,output_keep_prob=1 - self.drop_out_rate)
         self.lstm3_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm3,output_keep_prob=1 - self.drop_out_rate)
 
-        self.rbm = RBM(self.dim_hidden * 2, self.dim_hidden, gibbs_steps = 10)
-
         self.encode_image_W = tf.Variable(tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1),name='encode_image_W')
         self.encode_image_b = tf.Variable(tf.zeros([dim_hidden]), name='encode_image_b')
         self.decode_image_W = tf.Variable(tf.random_uniform([dim_hidden, dim_image], -0.1, 0.1, name='decode_image_W'))
@@ -136,7 +134,7 @@ class Video_Caption_Generator():
         ####### Encoding Video ##########
         # encoding video
         pool_video = tf.reduce_sum(video, axis=1) # b x d_im
-        # embedding 
+        # embedding
         embed_video = tf.nn.xw_plus_b(pool_video, self.encode_image_W, self.encode_image_b) # b x h
         ####### Encoding Video ##########
 
