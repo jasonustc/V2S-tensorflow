@@ -3,7 +3,7 @@
 #     File Name           :     get_list.py
 #     Created By          :     shenxu
 #     Creation Date       :     [2017-03-01 09:07]
-#     Last Modified       :     [2017-03-07 15:37]
+#     Last Modified       :     [2017-03-19 17:40]
 #     Description         :      
 #################################################################################
 import os
@@ -113,4 +113,4 @@ if __name__ == '__main__':
 #            if count % 100 == 0:
 #                print count
 #    print count
-    build_list('/home/shenxu//data/msvd_feat_vgg_c3d_batch')
+    build_list('/data6/shenxu/v2s_data/msvd_feat_vgg_c3d_batch/')
