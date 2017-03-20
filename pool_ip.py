@@ -96,7 +96,7 @@ class Video_Caption_Generator():
         # mean pooling
         embed_video = tf.reduce_sum(video, axis=1) # b x d_im
         # embedding into (0, 1) range
-        output1 = tf.nn.tanh(tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b)) # b x h
+        output1 = tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b) # b x h
         # encoding sentence
         with tf.variable_scope("model") as scope:
             for i in xrange(self.n_caption_steps):
@@ -123,7 +123,7 @@ class Video_Caption_Generator():
 
         ######## Semantic Learning Stage ########
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
-        output_semantic = tf.nn.xw_plus_b(input_state, self.W_semantic, self.b_semantic)
+        output_semantic = tf.nn.relu(tf.nn.xw_plus_b(input_state, self.W_semantic, self.b_semantic))
         ######## Semantic Learning Stage ########
 
         ######## Decoding Stage ##########
@@ -176,13 +176,13 @@ class Video_Caption_Generator():
         # encoding video
         embed_video = tf.reduce_sum(video, axis=1) # b x d_im
         # embedding into (0, 1) range
-        output1 = tf.nn.tanh(tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b)) # b x h
+        output1 = tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b) # b x h
         ####### Encoding Video ##########
 
         ####### Semantic Mapping ########
         output2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
-        output_semantic = tf.nn.xw_plus_b(input_state, self.W_semantic, self.b_semantic)
+        output_semantic = tf.nn.relu(tf.nn.xw_plus_b(input_state, self.W_semantic, self.b_semantic))
         ####### Semantic Mapping ########
 
         ####### Decoding ########
@@ -230,7 +230,7 @@ class Video_Caption_Generator():
         ####### Semantic Mapping ########
         output1 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
-        output_semantic = tf.nn.xw_plus_b(input_state, self.W_semantic, self.b_semantic)
+        output_semantic = tf.nn.relu(tf.nn.xw_plus_b(input_state, self.W_semantic, self.b_semantic))
         ####### Semantic Mapping ########
 
         ####### Decoding ########
@@ -246,8 +246,10 @@ video_data_path_test = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/test_vn.txt'
 # seems to be no use
 video_feat_path = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
 
-model_path = '/Users/shenxu/Code/V2S-tensorflow/data0/models/'
-test_data_folder = '/Users/shenxu/Code/V2S-tensorflow/data0/'
+#model_path = '/Users/shenxu/Code/V2S-tensorflow/data0/models/'
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_ip/'
+#test_data_folder = '/Users/shenxu/Code/V2S-tensorflow/data0/'
+test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
 
 ############## Train Parameters #################
 dim_image = 4096*2
@@ -256,7 +258,7 @@ n_video_steps = 45
 n_caption_steps = 35
 n_epochs = 200
 batch_size = 100
-learning_rate = 0.0001 
+learning_rate = 0.0001
 ##################################################
 
 def get_video_data(video_data_path, video_feat_path, train_ratio=0.9):
@@ -438,11 +440,11 @@ def test_all_videos(sess, test_data, sent_tf, sent_mask_tf, gen_video_tf):
 
 def train():
     print 'load meta data...'
-#    meta_data, train_data, val_data, test_data = 
-#        get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
+    meta_data, train_data, val_data, test_data = \
+        get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
     wordtoix = np.load('./data0/wordtoix.npy').tolist()
-    train_data = np.asarray([test_data_folder + 'train000000.h5', test_data_folder + 'train000001.h5'])
-    val_data = np.asarray([test_data_folder + 'train000002.h5'])
+#    train_data = np.asarray([test_data_folder + 'train000000.h5', test_data_folder + 'train000001.h5'])
+#    val_data = np.asarray([test_data_folder + 'train000002.h5'])
     print 'build model and session...'
     model = Video_Caption_Generator(
             dim_image=dim_image,
@@ -457,7 +459,7 @@ def train():
     ## GPU configurations
     gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=0.6)
     tf_loss, tf_loss_caption, tf_loss_video, tf_video, tf_video_mask, tf_caption, tf_caption_mask, \
-        = model.build_model('keep', 'keep')
+        = model.build_model('random', 'keep')
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True,
         log_device_placement=False, gpu_options=gpu_options))
     # check for model file
@@ -518,20 +520,18 @@ def train():
             print "Epoch ", epoch, " is done. Saving the model ..."
             with tf.device("/cpu:0"):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
-            continue
-
             ######### test sentence generation ##########
             current_batch = h5py.File(val_data[np.random.randint(0,len(val_data))])
             video_tf, video_mask_tf, caption_tf, lstm3_variables_tf = model.build_sent_generator()
             ixtoword = pd.Series(np.load('./data0/ixtoword.npy').tolist())
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, train_data[-2:], 
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, train_data[-2:],
                 ixtoword, video_tf, video_mask_tf, caption_tf)
             for key in pred_dict.keys():
                 for ele in gt_dict[key]:
                     print "GT:  " + ele['caption']
                 print "PD:  " + pred_dict[key][0]['caption']
                 print '-------'
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, val_data, 
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, val_data,
                 ixtoword,video_tf, video_mask_tf, caption_tf)
             scorer = COCOScorer()
             total_score = scorer.score(gt_dict, pred_dict, id_list)
