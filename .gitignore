@@ -11,3 +11,6 @@ data0/
 log/
 *.log
 *.h5
+Att_baseline/
+pycocoevalcap/tokenizer/tmp*
+*.txt
