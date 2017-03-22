@@ -78,7 +78,7 @@ class Video_Caption_Generator():
         else:
             self.embed_word_b = tf.Variable(tf.zeros([n_words]), name='embed_word_b')
 
-    def build_model(self, drop_sent, drop_video):
+    def build_model(self, drop_sent='keep', drop_video='keep', caption_weight=1., video_weight=1., latent_weight=0.01):
         assert drop_sent in ['totally', 'random', 'keep']
         assert drop_video in ['totally', 'random', 'keep']
         video = tf.placeholder(tf.float32, [self.batch_size, self.n_video_steps, self.dim_image]) # b x nv x d
@@ -166,9 +166,9 @@ class Video_Caption_Generator():
         loss_caption = loss_caption / tf.reduce_sum(caption_mask)
         loss_video = loss_video / tf.reduce_sum(video_mask)
 
-        loss = loss_caption + loss_video + 0.001 * loss_latent
+        loss = caption_weight * loss_caption + video_weight * loss_video + latent_weight * loss_latent
         return loss, loss_caption, loss_latent, loss_video, video, video_mask, caption, caption_mask, \
-           z_mean, z_log_sigma_sq, z_sigma_sq, eps 
+           z_mean, z_log_sigma_sq, z_sigma_sq, eps
 
 
     def build_sent_generator(self):
@@ -465,7 +465,7 @@ def train():
     gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=0.6)
     tf_loss, tf_loss_caption, tf_loss_rbm, tf_loss_video, \
         tf_video, tf_video_mask, tf_caption, tf_caption_mask, \
-        tf_z_mean, tf_z_log_sigma_sq, tf_z_sigma_sq, tf_eps = model.build_model('random', 'keep')
+        tf_z_mean, tf_z_log_sigma_sq, tf_z_sigma_sq, tf_eps = model.build_model(drop_sent='random', video_weight=0., latent_weight=0.01)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True,
         log_device_placement=False, gpu_options=gpu_options))
     # check for model file
@@ -504,7 +504,7 @@ def train():
             current_caption_masks = np.asarray(current_batch['caption_label'])
             tEnd1 = time.time()
             _, loss_val, loss_caption, loss_latent, loss_video, z_mean, z_log_sigma_sq, z_sigma_sq, eps = sess.run(
-                    [train_op, tf_loss, tf_loss_caption, tf_loss_rbm, tf_loss_video, tf_z_mean, 
+                    [train_op, tf_loss, tf_loss_caption, tf_loss_rbm, tf_loss_video, tf_z_mean,
                     tf_z_log_sigma_sq, tf_z_sigma_sq, tf_eps],
                     feed_dict={
                         tf_video: current_feats,
