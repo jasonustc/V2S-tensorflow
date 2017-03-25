@@ -13,16 +13,16 @@ def _bytes_feature(value):
 def _float_feature(value):
 	return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
 
-def write_data_as_record(h5_file_list):
+def write_data_as_record(h5_file):
 	assert os.path.isfile(h5_file)
 	batch = h5py.File(h5_file)
-	feat_np = np.asarray(batch['data']).astype(np.float32)
+	feat_np = np.asarray(batch['data']).astype(np.float32)[:2, :2, :]
 	feat = feat_np.tostring()
-	label_np = np.asarray(batch['caption_label']).astype(np.int32)
+	label_np = np.asarray(batch['caption_label']).astype(np.int32)[:2, :]
 	label = label_np.tostring()
-	caption_id_np = np.asarray(batch['caption_id']).astype(np.int32)
+	caption_id_np = np.asarray(batch['caption_id']).astype(np.int32)[:2, :]
 	caption_id = caption_id_np.tostring()
-	video_label_np = np.asarray(batch['video_label']).astype(np.int32)
+	video_label_np = np.asarray(batch['video_label']).astype(np.int32)[:2, :]
 	video_label = video_label_np.tostring()
 	filename = os.path.splitext(h5_file)[0] + '.tfrecords'
 	print('Writing', filename)
@@ -40,6 +40,10 @@ def write_data_as_record(h5_file_list):
 		}))
 	writer.write(example.SerializeToString())
 	writer.close()
+	print 'data:',feat_np[0,0, 100: 200]
+	print 'label:', label_np[0, :]
+	print 'caption_id:', caption_id_np[0, :]
+	print 'video_label:', video_label_np[0, :]
 	return filename
 
 def read_record_file(filename):
