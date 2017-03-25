@@ -78,7 +78,7 @@ class Video_Caption_Generator():
         else:
             self.embed_word_b = tf.Variable(tf.zeros([n_words]), name='embed_word_b')
 
-    def build_model(self, drop_sent, drop_video):
+    def build_model(self, drop_sent='keep', drop_video='keep', caption_weight=1., video_weight=1.):
         assert drop_sent in ['totally', 'random', 'keep']
         assert drop_video in ['totally', 'random', 'keep']
         video = tf.placeholder(tf.float32, [self.batch_size, self.n_video_steps, self.dim_image]) # b x nv x d
@@ -95,7 +95,6 @@ class Video_Caption_Generator():
         # encoding video
         # mean pooling
         embed_video = tf.reduce_sum(video, axis=1) # b x d_im
-        # embedding into (0, 1) range
         output1 = tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b) # b x h
         # encoding sentence
         with tf.variable_scope("model") as scope:
@@ -108,13 +107,13 @@ class Video_Caption_Generator():
 
         ######## Dropout Stage #########
         if drop_sent == 'totally':
-            output2 = tf.constant(0) * output2
+            output2 = tf.constant(0, dtype=tf.float32) * output2
             output2 = tf.stop_gradient(output2)
         elif drop_sent == 'random':
             coeff = tf.floor(tf.random_uniform([1], 0, 1) + 0.5)
             output2 = coeff * output2
         if drop_video == 'totally':
-            output1 = tf.constant(0) * output1
+            output1 = tf.constant(0, dtype=tf.float32) * output1
             output1 = tf.stop_gradient(output1)
         elif drop_video == 'random':
             coeff = tf.floor(tf.random_uniform([1], 0, 1) + 0.5)
@@ -164,8 +163,8 @@ class Video_Caption_Generator():
         loss_caption = loss_caption / tf.reduce_sum(caption_mask)
         loss_video = loss_video / tf.reduce_sum(video_mask)
 
-        loss = loss_caption + loss_video
-        return loss, loss_caption, loss_video, video, video_mask, caption, caption_mask 
+        loss = caption_weight * loss_caption + video_weight * loss_video
+        return loss, loss_caption, loss_video, video, video_mask, caption, caption_mask
 
 
     def build_sent_generator(self):
@@ -459,7 +458,7 @@ def train():
     ## GPU configurations
     gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=0.6)
     tf_loss, tf_loss_caption, tf_loss_video, tf_video, tf_video_mask, tf_caption, tf_caption_mask, \
-        = model.build_model('random', 'keep')
+        = model.build_model(drop_sent='totally', video_weight=0.)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True,
         log_device_placement=False, gpu_options=gpu_options))
     # check for model file

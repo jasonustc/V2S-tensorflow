@@ -57,9 +57,9 @@ class Video_Caption_Generator():
         with tf.device("/cpu:0"):
             self.Wemb = tf.Variable(tf.random_uniform([n_words, dim_hidden], -0.1, 0.1), name='Wemb')
 
-        # encoding LSTM 
+        # encoding LSTM
         self.lstm1 = tf.contrib.rnn.LSTMCell(self.dim_hidden, use_peepholes=True, state_is_tuple=True)
-        # encoding LSTM 
+        # encoding LSTM
         self.lstm2 = tf.contrib.rnn.LSTMCell(self.dim_hidden, use_peepholes=True, state_is_tuple=True)
         # decoding LSTM for video
         self.lstm3 = tf.contrib.rnn.LSTMCell(self.dim_hidden, use_peepholes=True, state_is_tuple=True)
@@ -112,7 +112,7 @@ class Video_Caption_Generator():
         image_emb = tf.reshape(image_emb, [self.batch_size, self.n_video_steps, self.dim_hidden]) # b x nv x h
         image_emb = tf.transpose(image_emb, [1,0,2]) # n x b x h
 
-        c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h 
+        c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h state1 = (c1, m1)
         state1 = (c_init, m_init)
         state2 = (c_init, m_init)
@@ -357,19 +357,21 @@ video_data_path_val = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/val_vn.txt'
 video_data_path_test = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/test_vn.txt'
 # seems to be no use
 video_feat_path = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
-#model_path = '/home/shenxu/V2S-tensorflow/Att_baseline/models'
-model_path = '/Users/shenxu/Code/V2S-tensorflow/models/'
-test_data_folder = '/Users/shenxu/Code/V2S-tensorflow/data0/'
-home_folder = '/Users/shenxu/Code/V2S-tensorflow/'
+model_path = '/home/shenxu/V2S-tensorflow/models/att_lstm_vae'
+#model_path = '/Users/shenxu/Code/V2S-tensorflow/models/'
+#test_data_folder = '/Users/shenxu/Code/V2S-tensorflow/data0/'
+test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
+#home_folder = '/Users/shenxu/Code/V2S-tensorflow/'
+home_folder = '/home/shenxu/V2S-tensorflow/'
 
 ############## Train Parameters #################
 dim_image = 4096*2
-dim_hidden= 512*2
+dim_hidden= 512
 n_video_steps = 45
 n_caption_steps = 35
 n_epochs = 200
 batch_size = 100
-learning_rate = 0.0001 
+learning_rate = 0.0001
 ##################################################
 
 def get_video_data(video_data_path, video_feat_path, train_ratio=0.9):
@@ -554,10 +556,10 @@ def test_all_videos(sess, test_data, sent_tf, sent_mask_tf, gen_video_tf):
 
 def train():
     print 'load meta data...'
-#    meta_data, train_data, val_data, test_data = 
-#        get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
-    train_data = np.asarray([test_data_folder + 'train000000.h5', test_data_folder + 'train000001.h5'])
-    val_data = np.asarray([test_data_folder + 'train000002.h5'])
+    meta_data, train_data, val_data, test_data = \
+        get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
+#    train_data = np.asarray([test_data_folder + 'train000000.h5', test_data_folder + 'train000001.h5'])
+#    val_data = np.asarray([test_data_folder + 'train000002.h5'])
     wordtoix = np.load(home_folder + 'data0/wordtoix.npy').tolist()
     print 'build model and session...'
     model = Video_Caption_Generator(
@@ -571,7 +573,7 @@ def train():
             bias_init_vector=None)
 
     ## GPU configurations
-    gpu_options = tf.GPUOptions(allow_growth=True)
+    gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=0.6)
     tf_loss, tf_video, tf_video_mask, tf_caption, tf_caption_mask, tf_loss_caption, tf_loss_latent, tf_loss_video =  \
         model.build_model(drop_sent='keep', drop_video='keep')
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True,

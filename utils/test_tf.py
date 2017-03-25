@@ -95,9 +95,6 @@ record_file=write_data_as_record('../data0/train000000.h5')
 #read_record_file(record_file)
 read_record_queue(record_file)
 
-
-
-
 #a = tf.Variable(tf.random_uniform([5, 2, 3], -1, 1), name='a')
 #b = tf.Variable(tf.random_uniform([3, 3], -1, 1), name='b')
 #c = tf.scan(lambda c, x: tf.matmul(x, b), a)
@@ -115,3 +112,25 @@ read_record_queue(record_file)
 #current_caption_masks = np.array(current_batch['caption_label'])
 #tEnd = time.time()
 #print 'data reading time:', round(tEnd - tStart, 2), 's'
+def test_multi_gpu():
+    with tf.device('/gpu:0'):
+        a = tf.placeholder(tf.float32, [10, 10])
+        b = tf.placeholder(tf.float32, [10, 3])
+        c = tf.matmul(a, b)
+        l1 = tf.reduce_sum(a)
+
+    with tf.device('/gpu:1'):
+        d = tf.reduce_sum(c, axis=1)
+        e = tf.reduce_sum(d)
+        l2 = e
+
+    with tf.device('/cpu:0'):
+        l = l1 + l2
+    return l, l1, l2, a, b
+
+A = np.random.rand(10, 10).astype('float32')
+B = np.random.rand(10, 3).astype('float32')
+tf_l, tf_l1, tf_l2, tf_a, tf_b = test_multi_gpu()
+with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
+    l,l1,l2 = sess.run([tf_l, tf_l1, tf_l2], feed_dict={tf_a: A, tf_b: B})
+    print l, l1, l2

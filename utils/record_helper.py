@@ -13,38 +13,61 @@ def _bytes_feature(value):
 def _float_feature(value):
 	return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
 
-def write_data_as_record(h5_file):
-	assert os.path.isfile(h5_file)
-	batch = h5py.File(h5_file)
-	feat_np = np.asarray(batch['data']).astype(np.float32)[:2, :2, :]
-	feat = feat_np.tostring()
-	label_np = np.asarray(batch['caption_label']).astype(np.int32)[:2, :]
-	label = label_np.tostring()
-	caption_id_np = np.asarray(batch['caption_id']).astype(np.int32)[:2, :]
-	caption_id = caption_id_np.tostring()
-	video_label_np = np.asarray(batch['video_label']).astype(np.int32)[:2, :]
+def write_data_as_record(record_writer, data, encode_data, fname,
+	title, video_label, caption_label, caption_id, caption_id_1,
+	caption_id_2, caption_id_3, caption_id_4, caption_id_5):
+	data_np = np.asarray(data.astype(np.float32))
+	data = data_np.tostring()
+	encode_data_np = np.asarray(encode_data).astype(np.float32)
+	encode_data = encode_data_np.tostring()
+	video_label_np = np.asarray(video_label).astype(np.int32)
 	video_label = video_label_np.tostring()
-	filename = os.path.splitext(h5_file)[0] + '.tfrecords'
-	print('Writing', filename)
-	writer = tf.python_io.TFRecordWriter(filename)
+	caption_label_np = np.asarray(caption_label).astype(np.int32)
+	caption_label = caption_label_np.tostring()
+	caption_id_np = np.asarray(caption_id).astype(np.int32)
+	caption_id = caption_id_np.tostring()
+	caption_id_1_np = np.asarray(caption_id_1).astype(np.int32)
+	caption_id_1 = caption_id_1_np.tostring()
+	caption_id_2_np = np.asarray(caption_id_2).astype(np.int32)
+	caption_id_2 = caption_id_2_np.tostring()
+	caption_id_3_np = np.asarray(caption_id_3).astype(np.int32)
+	caption_id_3 = caption_id_3_np.tostring()
+	caption_id_4_np = np.asarray(caption_id_4).astype(np.int32)
+	caption_id_4 = caption_id_4_np.tostring()
+	caption_id_5_np = np.asarray(caption_id_5).astype(np.int32)
+	caption_id_5 = caption_id_5_np.tostring()
 	# Example contains a Features proto object
 	example = tf.train.Example(
 		# Features contains a map of string to Feature proto objects
 		features=tf.train.Features(feature={
 		# A Feature contains one of either a int64_list,
         # float_list, or bytes_list
-		'data': _bytes_feature(feat),
-		'label': _bytes_feature(label),
+		'data': _bytes_feature(data),
+		'encode_data': _bytes_feature(encode_data),
+        'fname': _bytes_feature(fname),
+        'title': _bytes_feature(title),
+		'video_label': _bytes_feature(video_label),
+		'caption_label': _bytes_feature(caption_label),
 		'caption_id': _bytes_feature(caption_id),
-		'video_label': _bytes_feature(video_label)
+		'caption_id_1': _bytes_feature(caption_id_1),
+		'caption_id_2': _bytes_feature(caption_id_2),
+		'caption_id_3': _bytes_feature(caption_id_3),
+		'caption_id_4': _bytes_feature(caption_id_4),
+		'caption_id_5': _bytes_feature(caption_id_5),
 		}))
 	writer.write(example.SerializeToString())
 	writer.close()
-	print 'data:',feat_np[0,0, 100: 200]
-	print 'label:', label_np[0, :]
-	print 'caption_id:', caption_id_np[0, :]
+	print 'data:', data_np[0, 150: 170]
+	print 'encode_data:', encode_data_np[0, 150: 170]
 	print 'video_label:', video_label_np[0, :]
-	return filename
+	print 'caption_label:', caption_label_np[0, :]
+	print 'caption_id:', caption_id_np[0, :]
+	print 'caption_id_1:', caption_id_1_np[0, :]
+	print 'caption_id_2:', caption_id_2_np[0, :]
+	print 'caption_id_3:', caption_id_3_np[0, :]
+	print 'caption_id_4:', caption_id_4_np[0, :]
+	print 'caption_id_5:', caption_id_np[0, :]
+	pdb.set_trace()
 
 def read_record_file(filename):
 	assert os.path.isfile(filename)
