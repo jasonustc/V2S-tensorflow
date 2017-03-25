@@ -6,6 +6,7 @@ import unicodedata
 import glob
 import os
 from keras.preprocessing import sequence
+import random
 
 feature_folder = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
 vgg_feat_folder = '/disk_2T/shenxu/msvd_feat_vgg/'
@@ -14,12 +15,16 @@ vgg_feat_name =  'fc6'
 c3d_feat_name = 'fc6'
 word_count_threshold = 1
 
-def get_cap_ids(title, wordtoix, cap_length):
+def get_cap_ids(title, wordtoix, cap_length, pad='post'):
+    assert pad in ['pre', 'post']
     cap_id = [wordtoix[word] for word in title.lower().split(' ') if word in wordtoix]
     n_words = len(cap_id) if len(cap_id) < cap_length else cap_length - 1
     cap_id = [cap_id]
     ## the last word must be '<END>' ###
-    return sequence.pad_sequences(cap_id, padding='post', maxlen=cap_length-1), n_words
+    if pad == 'post':
+        return sequence.pad_sequences(cap_id, padding='post', maxlen=cap_length-1), n_words
+    else:
+        return sequence.pad_sequences(cap_id, padding='pre', maxlen=cap_length-1), n_words
 
 def preProBuildWordVocab(sentence_iterator, word_count_threshold=5): # borrowed this function from NeuralTalk
     print 'preprocessing word counts and creating vocab based on word count threshold %d' % (word_count_threshold, )
@@ -62,8 +67,6 @@ def build_vocab(train_set):
     np.save('bias_init_vector', bias_init_vector)
     return wordtoix, ixtoword
 
-
-
 def trans_video_youtube(datasplit_list, datasplit, vgg_feat_name,
         c3d_feat_name, wordtoix):
     assert len(datasplit_list) > 0
@@ -77,37 +80,64 @@ def trans_video_youtube(datasplit_list, datasplit, vgg_feat_name,
     fname = []
     title = []
     data = []
+    en_data = []
     video_label = []
     caption_label = []
     caption_id = []
+    caption_id_1 = []
+    caption_id_2 = []
+    caption_id_3 = []
+    caption_id_4 = []
+    caption_id_5 = []
     for ele in datasplit_list:
         vgg_feat_file = vgg_feat_folder + ele + '.h5'
         c3d_feat_file = c3d_feat_folder + ele + '_c3d_' + c3d_feat_name + '-1.h5'
         assert os.path.isfile(vgg_feat_file)
         assert os.path.isfile(c3d_feat_file)
-        vgg_feat = np.array(h5py.File(vgg_feat_file)[vgg_feat_name])
-        c3d_feat = np.array(h5py.File(c3d_feat_file)['data'])
+        vgg_feat = np.asarray(h5py.File(vgg_feat_file)[vgg_feat_name])
+        c3d_feat = np.asarray(h5py.File(c3d_feat_file)['data'])
         # to solve the number of frames mismatch between different videos
         sample_data = np.zeros([n_length, 4096 * 2])
+        encode_data = np.zeros([n_length, 4096 * 2])
         concat_feat = np.concatenate((vgg_feat, c3d_feat), axis = 1)
+        # post pad
         sample_data[:concat_feat.shape[0], :] = concat_feat
+        # pre pad
+        encode_data[-concat_feat.shape[0]:, :] = concat_feat
         video_name = ele
         if video_name in re.keys():
             print video_name, 'num_sen:', len(re[video_name])
-            for xxx in re[video_name]:
-                #pdb.set_trace()
+            caps = re[video_name]
+            for xxx in caps:
+                en_cap_ind = random.sample(range(0, len(caps)), 5)
                 if len(xxx.split(' ')) < 35:
                     fname.append(video_name)
                     title.append(unicodedata.normalize('NFKD', xxx).encode('ascii','ignore'))
                     data.append(sample_data)
+                    en_data.append(encode_data)
                     ### video label ###
                     vl = np.zeros([n_length])
                     vl[:concat_feat.shape[0]] = 1
                     video_label.append(vl)
                     ### caption of word ids ###
-                    cap_id, n_words = get_cap_ids(xxx, wordtoix, cap_length)
+                    cap_id, n_words = get_cap_ids(xxx, wordtoix, cap_length, pad='post')
+                    cap_id_1, n_word_1 = get_cap_ids(caps[en_cap_ind[0]], wordtoix, cap_length, pad='pre')
+                    cap_id_2, n_word_2 = get_cap_ids(caps[en_cap_ind[1]], wordtoix, cap_length, pad='pre')
+                    cap_id_3, n_word_3 = get_cap_ids(caps[en_cap_ind[2]], wordtoix, cap_length, pad='pre')
+                    cap_id_4, n_word_4 = get_cap_ids(caps[en_cap_ind[3]], wordtoix, cap_length, pad='pre')
+                    cap_id_5, n_word_5 = get_cap_ids(caps[en_cap_ind[4]], wordtoix, cap_length, pad='pre')
                     cap_id = np.hstack([cap_id, np.zeros([1,1])]).astype(int)
+                    cap_id_1 = np.hstack([cap_id_1, np.zeros([1,1])]).astype(int)
+                    cap_id_2 = np.hstack([cap_id_2, np.zeros([1,1])]).astype(int)
+                    cap_id_3 = np.hstack([cap_id_3, np.zeros([1,1])]).astype(int)
+                    cap_id_4 = np.hstack([cap_id_4, np.zeros([1,1])]).astype(int)
+                    cap_id_5 = np.hstack([cap_id_5, np.zeros([1,1])]).astype(int)
                     caption_id.append(np.squeeze(cap_id))
+                    caption_id_1.append(np.squeeze(cap_id_1))
+                    caption_id_2.append(np.squeeze(cap_id_2))
+                    caption_id_3.append(np.squeeze(cap_id_3))
+                    caption_id_4.append(np.squeeze(cap_id_4))
+                    caption_id_5.append(np.squeeze(cap_id_5))
                     ### caption labels ###
                     capl = np.zeros([cap_length])
                     capl[:n_words + 1] = 1
@@ -115,19 +145,31 @@ def trans_video_youtube(datasplit_list, datasplit, vgg_feat_name,
                     cnt += 1
                     if cnt == batch_size:
                         batch = h5py.File(feature_folder + datasplit + '{:06d}'.format(initial) + '.h5','w')
-                        batch['data'] = np.array(data) #np.zeros((batch_size, length, 4096*2))
-                        batch['fname'] = np.array(fname)
-                        batch['title'] = np.array(title)
+                        batch['data'] = np.asarray(data) #np.zeros((batch_size, length, 4096*2))
+                        batch['encode_data'] = np.asarray(en_data)
+                        batch['fname'] = np.asarray(fname)
+                        batch['title'] = np.asarray(title)
 #                       batch['pos'] = np.zeros(batch_size)
-                        batch['video_label'] = np.array(video_label) # np.zeros((batch_size, length))
-                        batch['caption_label'] = np.array(caption_label)
-                        batch['caption_id'] = np.array(caption_id)
+                        batch['video_label'] = np.asarray(video_label) # np.zeros((batch_size, length))
+                        batch['caption_label'] = np.asarray(caption_label)
+                        batch['caption_id'] = np.asarray(caption_id)
+                        batch['caption_id_1'] = np.asarray(caption_id_1)
+                        batch['caption_id_2'] = np.asarray(caption_id_2)
+                        batch['caption_id_3'] = np.asarray(caption_id_3)
+                        batch['caption_id_4'] = np.asarray(caption_id_4)
+                        batch['caption_id_5'] = np.asarray(caption_id_5)
                         fname = []
                         title = []
                         video_label = []
                         caption_label = []
                         caption_id = []
+                        caption_id_1 = []
+                        caption_id_2 = []
+                        caption_id_3 = []
+                        caption_id_4 = []
+                        caption_id_5 = []
                         data = []
+                        en_code = []
                         cnt = 0
                         initial += 1
         #### last batch ####
@@ -135,25 +177,42 @@ def trans_video_youtube(datasplit_list, datasplit, vgg_feat_name,
             while len(fname) < batch_size:
                 fname.append('')
                 title.append('')
-            print 'data shape:', np.array(data).shape
-            print 'fname shape: ', np.array(fname).shape
-            print 'title shape: ', np.array(title).shape
-            print 'caption_id shape:', np.array(caption_id).shape
-            print 'caption_label shape: ', np.array(caption_label).shape
-            print 'video_label shape:', np.array(video_label).shape
+            print 'data shape:', np.asarray(data).shape
+            print 'fname shape: ', np.asarray(fname).shape
+            print 'title shape: ', np.asarray(title).shape
+            print 'caption_id shape:', np.asarray(caption_id).shape
+            print 'caption_label shape: ', np.asarray(caption_label).shape
+            print 'video_label shape:', np.asarray(video_label).shape
             batch = h5py.File(feature_folder + datasplit + '{:06d}'.format(initial) + '.h5','w')
             batch['data'] = np.zeros((batch_size, n_length, 4096*2))
-            batch['data'][:len(data),:,:] = np.array(data)#np.zeros((batch_size,n_length, 4096*2))
+            batch['data'][:len(data),:,:] = np.asarray(data)#np.zeros((batch_size,n_length, 4096*2))
+            batch['encode_data'] = np.zeros((batch_size, n_length, 4096*2))
+            batch['encode_data'][:len(en_data),:,:] = np.asarray(en_data)#np.zeros((batch_size,n_length, 4096*2))
             fname = np.array(fname)
             title = np.array(title)
             batch['fname'] = fname
             batch['title'] = title
             batch['video_label'] = np.zeros((batch_size, n_length))
-            batch['video_label'][:len(data),:] = np.array(video_label) #np.zeros((batch_size, n_length))
+            batch['video_label'][:len(data),:] = np.asarray(video_label) #np.zeros((batch_size, n_length))
             ### caption of word ids ###
             ci = np.zeros((batch_size, cap_length))
             ci[:len(caption_id), :] = np.array(caption_id) #np.zeros((batch_size, caption_length))
             batch['caption_id'] = ci
+            ci_1 = np.zeros((batch_size, cap_length))
+            ci_1[:len(caption_id_1), :] = np.array(caption_id_1) #np.zeros((batch_size, caption_length))
+            batch['caption_id_1'] = ci
+            ci_2 = np.zeros((batch_size, cap_length))
+            ci_2[:len(caption_id_2), :] = np.array(caption_id_2) #np.zeros((batch_size, caption_length))
+            batch['caption_id_2'] = ci_2
+            ci_3 = np.zeros((batch_size, cap_length))
+            ci_3[:len(caption_id_3), :] = np.array(caption_id_3) #np.zeros((batch_size, caption_length))
+            batch['caption_id_3'] = ci_3
+            ci_4 = np.zeros((batch_size, cap_length))
+            ci_4[:len(caption_id_4), :] = np.array(caption_id_4) #np.zeros((batch_size, caption_length))
+            batch['caption_id_4'] = ci_4
+            ci_5 = np.zeros((batch_size, cap_length))
+            ci_5[:len(caption_id_5), :] = np.array(caption_id_5) #np.zeros((batch_size, caption_length))
+            batch['caption_id_5'] = ci_5
             ### caption labels ###
             capl = np.zeros((batch_size, cap_length))
             capl[:len(caption_label), :] = np.array(caption_label)#np.zeros((batch_size, caption_length))

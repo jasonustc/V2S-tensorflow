@@ -212,7 +212,7 @@ class Video_Caption_Generator():
         loss_video = loss_video / tf.reduce_sum(video_mask)
 
         loss = cap_weight * loss_caption + lat_weight * loss_latent + vid_weight * loss_video
-        return loss, loss_caption, loss_latent, loss_video, video, video_mask, caption, caption_mask
+        return loss, loss_caption, loss_latent, loss_video, video, video_mask, caption, caption_mask, output_semantic
 
 
     def build_sent_generator(self):
@@ -337,9 +337,11 @@ video_data_path_val = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/val_vn.txt'
 video_data_path_test = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/test_vn.txt'
 # seems to be no use
 video_feat_path = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
-model_path = '/Users/shenxu/Code/V2S-tensorflow/models/'
-test_data_folder = '/Users/shenxu/Code/V2S-tensorflow/data0/'
-home_folder = '/Users/shenxu/Code/V2S-tensorflow/'
+#model_path = '/Users/shenxu/Code/V2S-tensorflow/models/'
+model_path = '/home/shenxu/V2S-tensorflow/models/att_vae/'
+test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
+#home_folder = '/Users/shenxu/Code/V2S-tensorflow/'
+home_folder = '/home/shenxu/V2S-tensorflow/'
 
 ############## Train Parameters #################
 dim_image = 4096*2
@@ -530,11 +532,12 @@ def test_all_videos(sess, test_data, sent_tf, sent_mask_tf, gen_video_tf):
     return avg_loss / len(test_data)
 
 def train():
+    assert os.path.isdir(model_path)
     print 'load meta data...'
-#    meta_data, train_data, val_data, test_data = 
-#        get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
-    train_data = np.asarray([test_data_folder + 'train000000.h5', test_data_folder + 'train000001.h5'])
-    val_data = np.asarray([test_data_folder + 'train000002.h5'])
+    meta_data, train_data, val_data, test_data = \
+        get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
+#    train_data = np.asarray([test_data_folder + 'train000000.h5', test_data_folder + 'train000001.h5'])
+#    val_data = np.asarray([test_data_folder + 'train000002.h5'])
     wordtoix = np.load(home_folder+'data0/wordtoix.npy').tolist()
     print 'build model and session...'
     model = Video_Caption_Generator(
@@ -550,7 +553,7 @@ def train():
     ## GPU configurations
     gpu_options = tf.GPUOptions(allow_growth=True, per_process_gpu_memory_fraction=0.6)
     tf_loss, tf_loss_caption, tf_loss_latent, tf_loss_video, tf_video, tf_video_mask, \
-        tf_caption, tf_caption_mask= model.build_model(drop_sent='keep', drop_video='keep')
+        tf_caption, tf_caption_mask, tf_output_semantic = model.build_model(drop_sent='keep', drop_video='keep')
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True,
         log_device_placement=False, gpu_options=gpu_options))
     # check for model file
@@ -588,8 +591,8 @@ def train():
             current_caption_matrix = np.asarray(current_batch['caption_id'])
             current_caption_masks = np.asarray(current_batch['caption_label'])
             tEnd1 = time.time()
-            _, loss_val, loss_cap, loss_lat, loss_vid = sess.run(
-                    [train_op, tf_loss, tf_loss_caption, tf_loss_latent, tf_loss_video],
+            _, loss_val, loss_cap, loss_lat, loss_vid, sem = sess.run(
+                    [train_op, tf_loss, tf_loss_caption, tf_loss_latent, tf_loss_video, tf_output_semantic],
                     feed_dict={
                         tf_video: current_feats,
                         tf_video_mask : current_video_masks,
@@ -600,6 +603,7 @@ def train():
             tStop = time.time()
             print "Epoch:", epoch, " Batch:", current_batch_file_idx, " Loss:", loss_val,
             print "loss_cap:", loss_cap, "loss_lat:", loss_lat, "loss_vid:", loss_vid
+            print "semantic:", sem[0, 20:60]
             print "Time Cost:", round(tStop - tStart,2), "s"
 
         print "Epoch:", epoch, " done. Loss:", np.mean(loss_epoch)
