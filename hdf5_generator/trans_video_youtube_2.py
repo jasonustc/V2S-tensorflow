@@ -5,7 +5,7 @@ import pdb
 import unicodedata
 import glob
 import os
-#from keras.preprocessing import sequence
+from keras.preprocessing import sequence
 import random
 import sys
 sys.path.insert(0, os.path.abspath('../'))
@@ -305,9 +305,9 @@ def getlist(feature_folder_name, split):
 if __name__ == '__main__':
     dataset = np.load('msvd_dataset.npz')
     wordtoix, _ = build_vocab(dataset['train'])
-    trans_video_youtube_record(dataset['train'], 'train', vgg_feat_name, c3d_feat_name, wordtoix)
+#    trans_video_youtube_record(dataset['train'], 'train', vgg_feat_name, c3d_feat_name, wordtoix)
 #    trans_video_youtube_record(dataset['val'], 'val', vgg_feat_name, c3d_feat_name, wordtoix)
-#    trans_video_youtube_record(dataset['test'], 'test', vgg_feat_name, c3d_feat_name, wordtoix)
+    trans_video_youtube_record(dataset['test'], 'test', vgg_feat_name, c3d_feat_name, wordtoix)
 #    getlist(feature_folder,'train')
 #    getlist(feature_folder,'val')
 #    getlist(feature_folder,'test')
