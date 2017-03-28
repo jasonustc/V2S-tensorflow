@@ -5,7 +5,7 @@ import pdb
 import unicodedata
 import glob
 import os
-from keras.preprocessing import sequence
+#from keras.preprocessing import sequence
 import random
 from utils.record_helper import write_data_as_record
 
