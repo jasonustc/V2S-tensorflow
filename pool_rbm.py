@@ -14,6 +14,10 @@ from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoi
 from modules.rbm import RBM
 from utils.model_ops import *
 
+#### custom parameters #####
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_rbm/'
+#### custom parameters #####
+
 class Video_Caption_Generator():
     def __init__(self, dim_image, n_words, dim_hidden, batch_size, n_caption_steps,
         n_video_steps, drop_out_rate, bias_init_vector=None):
@@ -235,10 +239,10 @@ def train():
         train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1 = \
             tf.train.shuffle_batch([train_data, train_encode_data, train_video_label,
                 train_caption_label, train_caption_id, train_caption_id_1],
-                batch_size=batch_size, num_threads=3, capacity=prefetch, min_after_dequeue=int(prefetch/4))
+                batch_size=batch_size, num_threads=num_threads, capacity=capacity, min_after_dequeue=min_queue_examples)
         val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1 = \
-            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1], 
-                batch_size=batch_size, num_threads=3, capacity=300)
+            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1],
+                batch_size=batch_size, num_threads=1, capacity=2*batch_size)
     # build model on GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_video, tf_video_mask, tf_caption, tf_caption_mask= model.build_model(train_data, train_video_label, \
@@ -274,7 +278,7 @@ def train():
     loss_epoch = 0
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    for step in range(n_steps):
+    for step in xrange(1, n_steps+1):
         tStart = time.time()
         _, loss_val = sess.run([train_op, tf_loss])
         tStop = time.time()
@@ -303,7 +307,6 @@ def train():
                 sess, n_val_steps, ixtoword, val_caption_tf, val_fname)
             scorer = COCOScorer()
             total_score = scorer.score(gt_dict, pred_dict, id_list)
-            
             ######### test video generation #############
             mse = test_all_videos(sess, n_val_steps, val_data, val_video_tf)
 
@@ -355,9 +358,7 @@ def test(model_path='models/model-900', video_feat_path=video_feat_path):
 if __name__ == '__main__':
     args = parse_args()
     if args.task == 'train':
-        with tf.device('/gpu:'+str(args.gpu_id)):
-            print 'using gpu:', args.gpu_id
-            train()
+        train()
     elif args.task == 'test':
         with tf.device('/gpu:'+str(args.gpu_id)):
             total_score = test(model_path = args.model)

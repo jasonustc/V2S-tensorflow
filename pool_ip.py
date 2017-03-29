@@ -13,6 +13,11 @@ import unicodedata
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 from modules.variational_autoencoder import VAE
 from utils.model_ops import *
+from utils.record_helper import read_and_decode
+
+#### custom parameters #####
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_ip/'
+#### custom parameters #####
 
 class Video_Caption_Generator():
     def __init__(self, dim_image, n_words, dim_hidden, batch_size, n_caption_steps,
@@ -64,7 +69,7 @@ class Video_Caption_Generator():
         ######## Encoding Stage #########
         # encoding video
         # mean pooling
-        embed_video = tf.reduce_sum(video, axis=1) # b x d_im
+        embed_video = tf.reduce_mean(video, axis=1) # b x d_im
         output1 = tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b) # b x h
         # encoding sentence
         with tf.variable_scope("model") as scope:
@@ -97,7 +102,7 @@ class Video_Caption_Generator():
         ######## Semantic Learning Stage ########
 
         ######## Decoding Stage ##########
-        state3 = (c_init, h_init) # 2 x b x h
+        state3 = (c_init, m_init) # 2 x b x h
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
 
         loss_caption = 0.0
@@ -140,7 +145,7 @@ class Video_Caption_Generator():
 
         ####### Encoding Video ##########
         # encoding video
-        embed_video = tf.reduce_sum(video, axis=1) # b x d_im
+        embed_video = tf.reduce_mean(video, axis=1) # b x d_im
         output1 = tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b) # b x h
         ####### Encoding Video ##########
 
@@ -207,8 +212,8 @@ def train():
     print 'load meta data...'
     wordtoix = np.load(home_folder + 'data0/wordtoix.npy').tolist()
     print 'build model and session...'
-    # save parameters on CPU
-    with tf.device("/cpu:0"):
+    # place shared parameters on the GPU
+    with tf.device("/gpu:0"):
         model = Video_Caption_Generator(
                 dim_image=dim_image,
                 n_words=len(wordtoix),
@@ -221,7 +226,7 @@ def train():
     tStart_total = time.time()
     n_epoch_steps = int(n_train_samples / batch_size)
     n_steps = n_epochs * n_epoch_steps
-    # build data reading graph on CPU
+    # preprocessing on the CPU
     with tf.device('/cpu:0'):
         train_data, train_encode_data, _, _, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
             _, _, _, _ = read_and_decode(video_data_path_train)
@@ -230,13 +235,13 @@ def train():
         # random batches
         train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1 = \
             tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1],
-                batch_size=batch_size, num_threads=3, capacity=prefetch, min_after_dequeue=int(prefetch/4))
+                batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
         val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1 = \
-            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1], 
-                batch_size=batch_size, num_threads=3, capacity=300)
-    # build graph on GPU
+            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1],
+                batch_size=batch_size, num_threads=1, capacity=2*batch_size)
+    # define model on the GPU
     with tf.device("/gpu:0"):
-        tf_loss, tf_loss_cap, tf_loss_video, tf_output_semantic = model.build_model( 
+        tf_loss, tf_loss_cap, tf_loss_vid, tf_output_semantic = model.build_model(
             train_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data)
         val_video_tf = model.build_video_generator(val_caption_id_1)
@@ -254,7 +259,7 @@ def train():
         print("Created model with fresh parameters.")
         sess.run(tf.global_variables_initializer())
     temp = set(tf.global_variables())
-    # train on GPU
+    # train on the GPU
     with tf.device("/gpu:0"):
 #        train_op = tf.train.AdamOptimizer(learning_rate).minimize(tf_loss)
         optimizer = tf.train.AdamOptimizer(learning_rate)
@@ -272,7 +277,7 @@ def train():
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     for step in range(n_steps):
         tStart = time.time()
-        _, loss_val, loss_cap, loss_vid, sem = sess.run([train_op, tf_loss])
+        _, loss_val, loss_cap, loss_vid, sem = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_vid, tf_output_semantic])
         tStop = time.time()
         print "semantic:", sem[0, :10]
         print "step:", step, " Loss:", loss_val, "Loss_cap:", loss_cap, "loss_vid:", loss_vid,
@@ -301,7 +306,6 @@ def train():
 
             ######### test video generation #############
             mse = test_all_videos(sess, n_val_steps, val_data, val_video_tf)
-            
             sys.stdout.flush()
         sys.stdout.flush()
 
@@ -349,9 +353,7 @@ def test(model_path='models/model-900', video_feat_path=video_feat_path):
 if __name__ == '__main__':
     args = parse_args()
     if args.task == 'train':
-        with tf.device('/gpu:'+str(args.gpu_id)):
-            print 'using gpu:', args.gpu_id
-            train()
+        train()
     elif args.task == 'test':
         with tf.device('/gpu:'+str(args.gpu_id)):
             total_score = test(model_path = args.model)

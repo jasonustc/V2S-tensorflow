@@ -29,6 +29,6 @@ class VAE(object):
 		eps = tf.random_normal(tf.shape(z_mean), 0., 1.) # b x n_out
 		z = tf.add(z_mean, tf.multiply(tf.sqrt(z_sigma_sq), eps)) # b x n_out
 		latent_loss = -0.5 * tf.reduce_mean(tf.reduce_sum(1 + z_log_sigma_sq - \
-			tf.square(z_mean) - z_sigma_sq, axis=1)) # 1 
-#		return latent_loss, z, z_mean, z_log_sigma_sq, z_sigma_sq, eps
-		return latent_loss, z
+			tf.square(z_mean) - z_sigma_sq, axis=1)) # 1
+		return latent_loss, z, z_mean, z_log_sigma_sq, z_sigma_sq, eps
+#		return latent_loss, z

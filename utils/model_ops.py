@@ -19,7 +19,6 @@ video_data_path_test = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/test.tfrecords
 video_feat_path = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
 
 #model_path = '/Users/shenxu/Code/V2S-tensorflow/data0/models/'
-model_path = '/home/shenxu/V2S-tensorflow/models/pool_lstm/'
 test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
 home_folder = '/home/shenxu/V2S-tensorflow/'
 
@@ -31,8 +30,9 @@ n_caption_steps = 35
 n_epochs = 200
 batch_size = 100
 learning_rate = 0.0001
-prefetch = 10000
-min_queue_examples = 1000
+num_threads = 3
+min_queue_examples = batch_size
+prefetch = num_threads * batch_size + min_queue_examples
 clip_norm = 35
 n_train_samples = 49659
 n_val_samples = 4149
@@ -228,8 +228,9 @@ def testing_all(sess, n_steps, ixtoword, caption_tf, name_tf):
 def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf):
     avg_loss = 0.
     for ind in xrange(n_steps):
-        gt_image, pd_image = sess.run(gt_video_tf, gen_video_tf)
+        gt_images, pd_image = sess.run([gt_video_tf, gen_video_tf])
+        gt_image = np.mean(gt_images, axis=1)
         loss = np.sqrt(np.sum((pd_image - gt_image)**2, axis=1))
-        avg_loss += np.sum(loss) / np.asarray(test_sent).shape[0]
+        avg_loss += np.sum(loss) / gt_images.shape[0]
     return avg_loss / n_steps
 
