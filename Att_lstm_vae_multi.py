@@ -110,6 +110,7 @@ class Video_Caption_Generator():
                         current_embed_4 = tf.nn.embedding_lookup(self.Wemb, caption_4[:,i]) # b x h
                         current_embed_5 = tf.nn.embedding_lookup(self.Wemb, caption_5[:,i]) # b x h
                     output2_1, state2_1 = self.lstm2_dropout(current_embed_1, state2_1) # b x h
+                    scope.reuse_variables()
                     output2_2, state2_2 = self.lstm2_dropout(current_embed_2, state2_2) # b x h
                     output2_3, state2_3 = self.lstm2_dropout(current_embed_3, state2_3) # b x h
                     output2_4, state2_4 = self.lstm2_dropout(current_embed_4, state2_4) # b x h
