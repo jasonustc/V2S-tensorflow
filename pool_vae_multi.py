@@ -14,9 +14,8 @@ from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoi
 from modules.variational_autoencoder import VAE
 from utils.model_ops import *
 from utils.record_helper import read_and_decode
-
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/pool_ip/'
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_multi/'
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -30,7 +29,7 @@ class Video_Caption_Generator():
         self.drop_out_rate = drop_out_rate
         self.n_video_steps = n_video_steps
 
-        with tf.device('/cpu:0'):
+        with tf.device("/cpu:0"):
             self.Wemb = tf.Variable(tf.random_uniform([n_words, dim_hidden], -0.1, 0.1), name='Wemb')
 
         # encoding LSTM for sentence
@@ -41,8 +40,7 @@ class Video_Caption_Generator():
         self.lstm2_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm2,output_keep_prob=1 - self.drop_out_rate)
         self.lstm3_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm3,output_keep_prob=1 - self.drop_out_rate)
 
-        self.W_semantic = tf.Variable(tf.random_uniform([2*dim_hidden, dim_hidden], -0.01, 0.01), name='W_sem')
-        self.b_semantic = tf.Variable(tf.zeros([dim_hidden]), name='b_sem')
+        self.vae = VAE(self.dim_hidden * 2, self.dim_hidden)
 
         self.encode_image_W = tf.Variable(tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1),name='encode_image_W')
         self.encode_image_b = tf.Variable(tf.zeros([dim_hidden]), name='encode_image_b')
@@ -55,8 +53,8 @@ class Video_Caption_Generator():
         else:
             self.embed_word_b = tf.Variable(tf.zeros([n_words]), name='embed_word_b')
 
-    def build_model(self, video, video_mask, caption, caption_1, caption_mask, 
-        drop_sent='keep', drop_video='keep', caption_weight=1., video_weight=1.):
+    def build_model(self, video, video_mask, caption, caption_1, caption_2, caption_3, caption_4, caption_5, 
+        caption_mask, drop_sent='keep', drop_video='keep', caption_weight=1., video_weight=1., latent_weight=0.01):
         caption_mask = tf.cast(caption_mask, tf.float32)
         video_mask = tf.cast(video_mask, tf.float32)
 
@@ -64,32 +62,47 @@ class Video_Caption_Generator():
         assert drop_video in ['totally', 'random', 'keep']
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        state2 = (c_init, m_init) # 2 x b x h
+        state2_1 = (c_init, m_init) # 2 x b x h
+        state2_2 = (c_init, m_init) # 2 x b x h
+        state2_3 = (c_init, m_init) # 2 x b x h
+        state2_4 = (c_init, m_init) # 2 x b x h
+        state2_5 = (c_init, m_init) # 2 x b x h
 
         ######## Encoding Stage #########
         # encoding video
         # mean pooling
         embed_video = tf.reduce_mean(video, axis=1) # b x d_im
-        output1 = tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b) # b x h
+        # embedding into (-1, 1) range
+        output1 = tf.nn.tanh(tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b)) # b x h
         # encoding sentence
         with tf.variable_scope("model") as scope:
             for i in xrange(self.n_caption_steps):
                 if i > 0: scope.reuse_variables()
                 with tf.variable_scope("LSTM2"):
                     with tf.device("/cpu:0"):
-                        current_embed = tf.nn.embedding_lookup(self.Wemb, caption_1[:,i]) # b x h
-                    output2, state2 = self.lstm2_dropout(current_embed, state2) # b x h
+                        current_embed_1 = tf.nn.embedding_lookup(self.Wemb, caption_1[:,i]) # b x h
+                        current_embed_2 = tf.nn.embedding_lookup(self.Wemb, caption_2[:,i]) # b x h
+                        current_embed_3 = tf.nn.embedding_lookup(self.Wemb, caption_3[:,i]) # b x h
+                        current_embed_4 = tf.nn.embedding_lookup(self.Wemb, caption_4[:,i]) # b x h
+                        current_embed_5 = tf.nn.embedding_lookup(self.Wemb, caption_5[:,i]) # b x h
+                    output2_1, state2_1 = self.lstm2_dropout(current_embed_1, state2_1) # b x h
+                    output2_2, state2_2 = self.lstm2_dropout(current_embed_2, state2_2) # b x h
+                    output2_3, state2_3 = self.lstm2_dropout(current_embed_3, state2_3) # b x h
+                    output2_4, state2_4 = self.lstm2_dropout(current_embed_4, state2_4) # b x h
+                    output2_5, state2_5 = self.lstm2_dropout(current_embed_5, state2_5) # b x h
+        output2 = tf.constant(0.2) * output2_1 + tf.constant(0.2) * output2_2 + 0.2 * output2_3 + \
+            tf.constant(0.2) * output2_4 + tf.constant(0.2) * output2_5
         ######## Encoding Stage #########
 
         ######## Dropout Stage #########
         if drop_sent == 'totally':
-            output2 = tf.constant(0, dtype=tf.float32) * output2
+            output2 = tf.constant(0) * output2
             output2 = tf.stop_gradient(output2)
         elif drop_sent == 'random':
             coeff = tf.floor(tf.random_uniform([1], 0, 1) + 0.5)
             output2 = coeff * output2
         if drop_video == 'totally':
-            output1 = tf.constant(0, dtype=tf.float32) * output1
+            output1 = tf.constant(0) * output1
             output1 = tf.stop_gradient(output1)
         elif drop_video == 'random':
             coeff = tf.floor(tf.random_uniform([1], 0, 1) + 0.5)
@@ -98,7 +111,7 @@ class Video_Caption_Generator():
 
         ######## Semantic Learning Stage ########
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
-        output_semantic = tf.nn.relu(tf.nn.xw_plus_b(input_state, self.W_semantic, self.b_semantic))
+        loss_latent, output_semantic, z_mean, z_log_sigma_sq, z_sigma_sq, eps = self.vae(input_state)
         ######## Semantic Learning Stage ########
 
         ######## Decoding Stage ##########
@@ -121,7 +134,8 @@ class Video_Caption_Generator():
                 concated = tf.concat([indices, labels], 1) # b x 2
                 onehot_labels = tf.sparse_to_dense(concated, 
                     tf.stack([self.batch_size, self.n_words]), 1.0, 0.0) # b x w
-                current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
+                with tf.device("/cpu:0"):
+                    current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
                 logit_words = tf.nn.xw_plus_b(output3, self.embed_word_W, self.embed_word_b) # b x w
                 cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits = logit_words, 
                     labels = onehot_labels) # b x 1
@@ -137,28 +151,28 @@ class Video_Caption_Generator():
         loss_caption = loss_caption / tf.reduce_sum(caption_mask)
         loss_video = loss_video / tf.reduce_sum(video_mask)
 
-        loss = caption_weight * loss_caption + video_weight * loss_video
-        return loss, loss_caption, loss_video, output_semantic
+        loss = caption_weight * loss_caption + video_weight * loss_video + latent_weight * loss_latent
+        return loss, loss_caption, loss_latent, loss_video, output_semantic
 
 
     def build_sent_generator(self, video):
-
         ####### Encoding Video ##########
         # encoding video
         embed_video = tf.reduce_mean(video, axis=1) # b x d_im
-        output1 = tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b) # b x h
+        # embedding into (0, 1) range
+        output1 = tf.nn.tanh(tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b)) # b x h
         ####### Encoding Video ##########
 
         ####### Semantic Mapping ########
         output2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
-        output_semantic = tf.nn.relu(tf.nn.xw_plus_b(input_state, self.W_semantic, self.b_semantic))
+        _, output_semantic, _, _, _, _ = self.vae(input_state)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        c3 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        h3 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        state3 = (c3, h3) # n x 2 x h
+        c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
+        m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
+        state3 = (c_init, m_init) # n x 2 x h
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
 
         generated_words = []
@@ -174,29 +188,45 @@ class Video_Caption_Generator():
                 logit_words = tf.nn.xw_plus_b(output3, self.embed_word_W, self.embed_word_b) # b x w
                 max_prob_index = tf.argmax(logit_words, 1) # b
                 generated_words.append(max_prob_index) # b
-                current_embed = tf.nn.embedding_lookup(self.Wemb, max_prob_index)
+                with tf.device("/cpu:0"):
+                    current_embed = tf.nn.embedding_lookup(self.Wemb, max_prob_index)
         ####### Decoding ########
 
         generated_words = tf.transpose(tf.stack(generated_words)) # n_caption_step x 1
         return generated_words, lstm3_variables
 
-    def build_video_generator(self, sent):
+    def build_video_generator(self, sent_1, sent_2, sent_3, sent_4, sent_5):
+        c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
+        m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
+        state2_1 = (c_init, m_init) # 2 x b x h
+        state2_2 = (c_init, m_init) # 2 x b x h
+        state2_3 = (c_init, m_init) # 2 x b x h
+        state2_4 = (c_init, m_init) # 2 x b x h
+        state2_5 = (c_init, m_init) # 2 x b x h
         ####### Encoding Sentence ##########
-        c2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        m2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        state2 = (c2, m2)
         with tf.variable_scope("model") as scope:
             scope.reuse_variables()
             for i in xrange(self.n_caption_steps):
                 with tf.variable_scope("LSTM2"):
-                    current_embed = tf.nn.embedding_lookup(self.Wemb, sent[:, i])
-                    output2, state2 = self.lstm2_dropout(current_embed, state2) # b x h
+                    with tf.device("/cpu:0"):
+                        current_embed_1 = tf.nn.embedding_lookup(self.Wemb, sent_1[:,i]) # b x h
+                        current_embed_2 = tf.nn.embedding_lookup(self.Wemb, sent_2[:,i]) # b x h
+                        current_embed_3 = tf.nn.embedding_lookup(self.Wemb, sent_3[:,i]) # b x h
+                        current_embed_4 = tf.nn.embedding_lookup(self.Wemb, sent_4[:,i]) # b x h
+                        current_embed_5 = tf.nn.embedding_lookup(self.Wemb, sent_5[:,i]) # b x h
+                    output2_1, state2_1 = self.lstm2_dropout(current_embed_1, state2_1) # b x h
+                    output2_2, state2_2 = self.lstm2_dropout(current_embed_2, state2_2) # b x h
+                    output2_3, state2_3 = self.lstm2_dropout(current_embed_3, state2_3) # b x h
+                    output2_4, state2_4 = self.lstm2_dropout(current_embed_4, state2_4) # b x h
+                    output2_5, state2_5 = self.lstm2_dropout(current_embed_5, state2_5) # b x h
+        output2 = tf.constant(0.2) * output2_1 + tf.constant(0.2) * output2_2 + 0.2 * output2_3 + \
+            tf.constant(0.2) * output2_4 + tf.constant(0.2) * output2_5
         ####### Encoding Sentence ##########
 
         ####### Semantic Mapping ########
         output1 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
-        output_semantic = tf.nn.relu(tf.nn.xw_plus_b(input_state, self.W_semantic, self.b_semantic))
+        _, output_semantic, _, _, _, _ = self.vae(input_state)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
@@ -212,7 +242,7 @@ def train():
     print 'load meta data...'
     wordtoix = np.load(home_folder + 'data0/wordtoix.npy').tolist()
     print 'build model and session...'
-    # place shared parameters on the GPU
+    # shared parameters on the GPU
     with tf.device("/gpu:0"):
         model = Video_Caption_Generator(
                 dim_image=dim_image,
@@ -226,26 +256,31 @@ def train():
     tStart_total = time.time()
     n_epoch_steps = int(n_train_samples / batch_size)
     n_steps = n_epochs * n_epoch_steps
-    # preprocessing on the CPU
+    # preprocess on the CPU
     with tf.device('/cpu:0'):
         train_data, train_encode_data, _, _, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
-            _, _, _, _ = read_and_decode(video_data_path_train)
+            train_caption_id_2, train_caption_id_3, train_caption_id_4, train_caption_id_5 = read_and_decode(video_data_path_train)
         val_data, val_encode_data, val_fname, val_title, val_video_label, val_caption_label, val_caption_id, val_caption_id_1, \
-            _, _, _, _ = read_and_decode(video_data_path_val)
+            val_caption_id_2, val_caption_id_3, val_caption_id_4, val_caption_id_5 = read_and_decode(video_data_path_val)
         # random batches
-        train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1 = \
-            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1],
+        train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
+            train_caption_id_2, train_caption_id_3, train_caption_id_4, train_caption_id_5 = \
+            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1,
+                train_caption_id_2, train_caption_id_3, train_caption_id_4, train_caption_id_5],
                 batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
-        val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1 = \
-            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1],
-                batch_size=batch_size, num_threads=1, capacity=2*batch_size)
-    # define model on the GPU
+        val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_caption_id_2, val_caption_id_3,
+            val_caption_id_4, val_caption_id_5 = \
+            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_caption_id_2,
+                val_caption_id_3, val_caption_id_3, val_caption_id_4, val_caption_id_5],
+                batch_size=batch_size, num_threads=1, capacity=2* batch_size)
+    # graph on the GPU
     with tf.device("/gpu:0"):
-        tf_loss, tf_loss_cap, tf_loss_vid, tf_output_semantic = model.build_model(
-            train_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
+        tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z = model.build_model(train_data, train_video_label, \
+            train_caption_id, train_caption_id_1, train_caption_id_2, train_caption_id_3, train_caption_id_4,
+            train_caption_id_5, train_caption_label)
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data)
-        val_video_tf = model.build_video_generator(val_caption_id_1)
-
+        val_video_tf = model.build_video_generator(val_caption_id_1, val_caption_id_2, val_caption_id_3, val_caption_id_4,
+            val_caption_id_5)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
     # check for model file
     with tf.device("/cpu:0"):
@@ -262,25 +297,24 @@ def train():
     # train on the GPU
     with tf.device("/gpu:0"):
 #        train_op = tf.train.AdamOptimizer(learning_rate).minimize(tf_loss)
+        ## initialize variables added for optimizer
         optimizer = tf.train.AdamOptimizer(learning_rate)
         gvs = optimizer.compute_gradients(tf_loss)
         # when variable is not related to the loss, grad returned as None
         clip_gvs = [(tf.clip_by_norm(grad, clip_norm), var) for grad, var in gvs if grad is not None]
         train_op = optimizer.apply_gradients(gvs)
 
-    ## initialize variables added for optimizer
     sess.run(tf.variables_initializer(set(tf.global_variables()) - temp))
     # initialize epoch variable in queue reader
     sess.run(tf.local_variables_initializer())
     loss_epoch = 0
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    for step in range(n_steps):
+    for step in xrange(1, n_steps+1):
         tStart = time.time()
-        _, loss_val, loss_cap, loss_vid, sem = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_vid, tf_output_semantic])
+        _, loss_val, loss_cap, loss_lat, loss_vid, z = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z])
         tStop = time.time()
-        print "semantic:", sem[0, :10]
-        print "step:", step, " Loss:", loss_val, "Loss_cap:", loss_cap, "loss_vid:", loss_vid,
+        print "step:", step, " Loss:", loss_val,
         print "Time Cost:", round(tStop - tStart, 2), "s"
         loss_epoch += loss_val
 
@@ -289,7 +323,8 @@ def train():
             loss_epoch /= n_epoch_steps
             with tf.device("/cpu:0"):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
-            print 'epoch:', epoch, 'loss:', loss_epoch
+            print 'z:', z[0, :10]
+            print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_cap, "loss_lat:",loss_lat, "loss_vid:", loss_vid
             loss_epoch = 0
             ######### test sentence generation ##########
             ixtoword = pd.Series(np.load(home_folder + 'data0/ixtoword.npy').tolist())
@@ -303,10 +338,10 @@ def train():
             [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_caption_tf, val_fname)
             scorer = COCOScorer()
             total_score = scorer.score(gt_dict, pred_dict, id_list)
-
             ######### test video generation #############
             mse = test_all_videos(sess, n_val_steps, val_data, val_video_tf)
             sys.stdout.flush()
+
         sys.stdout.flush()
 
     coord.request_stop()
