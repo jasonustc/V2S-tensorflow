@@ -200,10 +200,10 @@ class Video_Caption_Generator():
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        decode_image = tf.nn.xw_plus_b(output_semantic, self.decode_image_W, self.decode_image_b)
+        decode_image = tf.nn.xw_plus_b(output_semantic, self.decode_image_W, self.decode_image_b) # b x d
         ####### Decoding ########
 
-        return decode_image
+        return decode_image # b x d
 
 def train():
     assert os.path.isdir(home_folder)
