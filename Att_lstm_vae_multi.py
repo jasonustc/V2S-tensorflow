@@ -65,8 +65,8 @@ class Video_Caption_Generator():
         self.embed_nn_Wp = tf.Variable(tf.random_uniform([3*dim_hidden, dim_hidden], -0.1,0.1), name='embed_nn_Wp')
         self.embed_nn_bp = tf.Variable(tf.zeros([dim_hidden]), name='embed_nn_bp')
 
-    def build_model(self, video, encode_video, video_mask, caption, caption_1, caption_mask,
-        drop_sent='keep', drop_video='keep', weight_caption=1., weight_video=1., weight_latent=0.01):
+    def build_model(self, video, encode_video, video_mask, caption, caption_1, caption_2, caption_3, caption_4,
+        caption_5, caption_mask, drop_sent='keep', drop_video='keep', weight_caption=1., weight_video=1., weight_latent=0.01):
         assert drop_sent in ['totally', 'random', 'keep']
         assert drop_video in ['totally', 'random', 'keep']
         video_mask = tf.cast(video_mask, tf.float32)
@@ -288,7 +288,7 @@ class Video_Caption_Generator():
         generated_words = tf.transpose(tf.stack(generated_words)) # n_caption_step x 1
         return generated_words, lstm3_variables
 
-    def build_video_generator(self, sent):
+    def build_video_generator(self, sent_1, sent_2, sent_3, sent_4, sent_5):
         ####### Encoding Sentence ##########
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x s0
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x s1
