@@ -274,6 +274,8 @@ def train():
     loss_epoch = 0
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    # write graph architecture to file
+    summary_writer = tf.summary.FileWriter(model_path + 'summary', sess.graph)
     for step in range(n_steps):
         tStart = time.time()
         _, loss_val, loss_cap, loss_vid, sem = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_vid, tf_output_semantic])
