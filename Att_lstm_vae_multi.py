@@ -312,7 +312,7 @@ class Video_Caption_Generator():
                     output2_3, state2_3 = self.lstm2_dropout(current_embed_3, state2_3) # b x h
                     output2_4, state2_4 = self.lstm2_dropout(current_embed_4, state2_4) # b x h
                     output2_5, state2_5 = self.lstm2_dropout(current_embed_5, state2_5) # b x h
-        output2 = tf.constant(0.2) * output2_1 + tf.constant(0.2) * output2_2 + 0.2 * output2_3 + \
+        output2 = tf.constant(0.2) * output2_1 + tf.constant(0.2) * output2_2 + tf.constant(0.2) * output2_3 + \
             tf.constant(0.2) * output2_4 + tf.constant(0.2) * output2_5
         ####### Encoding Sentence ##########
 
