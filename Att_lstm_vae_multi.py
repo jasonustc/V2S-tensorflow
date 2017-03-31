@@ -418,7 +418,8 @@ def train():
         clip_gvs = [(tf.clip_by_norm(grad, clip_norm), var) for grad, var in gvs if grad is not None]
         train_op = optimizer.apply_gradients(gvs)
 
-    global_step_tensor = tf.train.get_or_create_global_step()
+#    global_step_tensor = tf.train.create_global_step(graph=sess.graph)
+    global_step_tensor = tf.train.get_or_create_global_step(graph=sess.graph)
     ## initialize variables added for optimizer or saver
     sess.run(tf.variables_initializer(set(tf.global_variables()) - temp))
     # initialize epoch variable in queue reader
@@ -429,6 +430,7 @@ def train():
     # write graph architecture to file
     summary_writer = tf.summary.FileWriter(model_path + 'summary', sess.graph)
     epoch = sess.run(global_step_tensor)
+    pdb.set_trace()
     for step in xrange(1, n_steps+1):
         tStart = time.time()
         _, loss_val, loss_cap, loss_lat, loss_vid, sem = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z])

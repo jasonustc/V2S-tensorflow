@@ -232,9 +232,9 @@ def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf):
         gt_images, pd_images = sess.run([gt_video_tf, gen_video_tf]) # b x n x d
         if len(pd_images.shape) == 2: # reconstruct mean_pooling
             gt_images = np.mean(gt_images, axis=1) # b x d
-            loss = np.sqrt(np.sum((pd_images - gt_image)**2), axis=1)
+            loss = np.sqrt(np.sum((pd_images - gt_images)**2, axis=1))
         else:
-            loss = np.sqrt(np.sum((pd_images - gt_image)**2), axis=(1,2))
+            loss = np.sqrt(np.sum((pd_images - gt_images)**2, axis=(1,2)))
         avg_loss += np.sum(loss) / gt_images.shape[0]
     return avg_loss / n_steps
 
