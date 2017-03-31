@@ -99,7 +99,7 @@ class Video_Caption_Generator():
                 if i > 0: scope.reuse_variables()
                 with tf.variable_scope("LSTM2"):
                     with tf.device("/cpu:0"):
-                        current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
+                        current_embed = tf.nn.embedding_lookup(self.Wemb, caption_1[:,i])
                     output2, state2 = self.lstm2_dropout(current_embed, state2) # b x h
         ######## Encoding Stage #########
 
@@ -347,14 +347,14 @@ def train():
         train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1 = \
             tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1],
                 batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
-        val_data, val_encode_data, val_video_label, val_fname, val_caption_id = \
-            tf.train.batch([val_data, val_encode_data, val_video_label, val_fname, val_caption_id], batch_size=batch_size, num_threads=1, capacity=2*batch_size)
+        val_data, val_encode_data, val_video_label, val_fname, val_caption_id, val_caption_id_1 = \
+            tf.train.batch([val_data, val_encode_data, val_video_label, val_fname, val_caption_id, val_caption_id_1], batch_size=batch_size, num_threads=1, capacity=2*batch_size)
     # operation on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_caption, tf_loss_latent, tf_loss_video, tf_output_semantic = \
             model.build_model(train_data, train_encode_data, train_caption_id, train_caption_id_1, train_caption_label)
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data, val_encode_data)
-        val_video_tf, val_lstm4_variables_tf = model.build_video_generator(val_caption_id)
+        val_video_tf, val_lstm4_variables_tf = model.build_video_generator(val_caption_id_1)
 
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
     # check for model file

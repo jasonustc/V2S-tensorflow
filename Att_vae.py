@@ -62,7 +62,7 @@ class Video_Caption_Generator():
         self.embed_nn_Wp = tf.Variable(tf.random_uniform([3*dim_hidden, dim_hidden], -0.1,0.1), name='embed_nn_Wp')
         self.embed_nn_bp = tf.Variable(tf.zeros([dim_hidden]), name='embed_nn_bp')
 
-    def build_model(self, video, video_mask, caption, caption_mask, drop_sent='keep', 
+    def build_model(self, video, video_mask, caption, caption_1, caption_mask, drop_sent='keep', 
         drop_video='keep', cap_weight=1., vid_weight=1., lat_weight=0.01):
         video_mask = tf.cast(video_mask, tf.float32)
         caption_mask = tf.cast(caption_mask, tf.float32)
@@ -89,7 +89,7 @@ class Video_Caption_Generator():
                 if i > 0: scope.reuse_variables()
                 with tf.variable_scope("LSTM2"):
                     with tf.device("/cpu:0"):
-                        current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
+                        current_embed = tf.nn.embedding_lookup(self.Wemb, caption_1[:,i])
                     output2, state2 = self.lstm2_dropout(current_embed, state2) # b x h
         ######## Encoding Stage #########
 
