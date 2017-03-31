@@ -12,6 +12,8 @@ from cocoeval import COCOScorer
 import unicodedata
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 from modules.variational_autoencoder import VAE
+from utils.model_ops import *
+from utils.record_helper import read_and_decode
 
 ###### custom parameters #######
 model_path = '/home/shenxu/V2S-tensorflow/models/att_vae_multi/'
@@ -100,7 +102,7 @@ class Video_Caption_Generator():
                         current_embed_4 = tf.nn.embedding_lookup(self.Wemb, caption_4[:,i]) # b x h
                         current_embed_5 = tf.nn.embedding_lookup(self.Wemb, caption_5[:,i]) # b x h
                     output2_1, state2_1 = self.lstm2_dropout(current_embed_1, state2_1) # b x h
-                    scope.reuse_variables()
+                    tf.get_variable_scope().reuse_variables()
                     output2_2, state2_2 = self.lstm2_dropout(current_embed_2, state2_2) # b x h
                     output2_3, state2_3 = self.lstm2_dropout(current_embed_3, state2_3) # b x h
                     output2_4, state2_4 = self.lstm2_dropout(current_embed_4, state2_4) # b x h
@@ -267,7 +269,7 @@ class Video_Caption_Generator():
         generated_words = tf.transpose(tf.stack(generated_words)) # n_caption_step x 1
         return generated_words, lstm3_variables
 
-    def build_video_generator(self, sent_1, sent_2, sent_3, sent_4, sent_5):
+    def build_video_generator(self, caption_1, caption_2, caption_3, caption_4, caption_5):
         ####### Encoding Sentence ##########
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
@@ -356,21 +358,21 @@ def train():
         # random batches
         train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
             train_caption_id_2, train_caption_id_3, train_caption_id_4, train_caption_id_5 = \
-            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1,
-                train_caption_id_2, train_caption_id_3, train_caption_id_4, train_caption_id_5],
+            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
+                train_caption_id_2, train_caption_id_3, train_caption_id_4, train_caption_id_5], \
                 batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
-        val_data, val_encode_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_caption_id_2, val_caption_id_3,
+        val_data, val_encode_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_caption_id_2, val_caption_id_3, \
             val_caption_id_4, val_caption_id_5 = \
-            tf.train.batch([val_data, val_encode_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_caption_id_2,
-                val_caption_id_3, val_caption_id_3, val_caption_id_4, val_caption_id_5],
+            tf.train.batch([val_data, val_encode_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_caption_id_2, \
+                val_caption_id_3, val_caption_id_4, val_caption_id_5], \
                 batch_size=batch_size, num_threads=1, capacity=2* batch_size)
     # graph on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z = model.build_model(train_data, train_video_label, \
-            train_caption_id, train_caption_id_1, train_caption_id_2, train_caption_id_3, train_caption_id_4,
+            train_caption_id, train_caption_id_1, train_caption_id_2, train_caption_id_3, train_caption_id_4, \
             train_caption_id_5, train_caption_label)
-        val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data, val_encode_data)
-        val_video_tf = model.build_video_generator(val_caption_id_1, val_caption_id_2, val_caption_id_3, val_caption_id_4,
+        val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data, val_video_label)
+        val_video_tf = model.build_video_generator(val_caption_id_1, val_caption_id_2, val_caption_id_3, val_caption_id_4, \
             val_caption_id_5)
 
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
@@ -406,7 +408,7 @@ def train():
     summary_writer = tf.summary.FileWriter(model_path + 'summary', sess.graph)
     for step in xrange(1, n_steps+1):
         tStart = time.time()
-        _, loss_val, loss_cap, loss_vid, sem = sess.run([train_op, tf_loss, tf_loss_caption, tf_loss_video, tf_output_semantic])
+        _, loss_val, loss_cap, loss_lat, loss_vid, sem = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z])
         tStop = time.time()
         print "step:", step, " Loss:", loss_val,
         print "Time Cost:", round(tStop - tStart, 2), "s"
@@ -417,7 +419,7 @@ def train():
             loss_epoch /= n_epoch_steps
             with tf.device("/cpu:0"):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
-            print 'epoch:', epoch, 'loss:', loss_epoch, 'loss_cap:', loss_cap, 'loss_vid:', loss_vid
+            print 'epoch:', epoch, 'loss:', loss_epoch, 'loss_cap:', loss_cap, 'loss_lat:', loss_lat, 'loss_vid:', loss_vid
             print 'sem:', sem[0, :10]
             loss_epoch = 0
             ######### test sentence generation ##########
@@ -482,9 +484,7 @@ def test(model_path='models/model-900', video_feat_path=video_feat_path):
 if __name__ == '__main__':
     args = parse_args()
     if args.task == 'train':
-        with tf.device('/gpu:'+str(args.gpu_id)):
-            print 'using gpu:', args.gpu_id
-            train()
+        train()
     elif args.task == 'test':
         with tf.device('/gpu:'+str(args.gpu_id)):
             total_score = test(model_path = args.model)
