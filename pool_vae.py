@@ -97,7 +97,7 @@ class Video_Caption_Generator():
 
         ######## Semantic Learning Stage ########
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
-        loss_latent, output_semantic, z_mean, z_log_sigma_sq, z_sigma_sq, eps = self.vae(input_state)
+        loss_latent, output_semantic = self.vae(input_state)
         ######## Semantic Learning Stage ########
 
         ######## Decoding Stage ##########
@@ -152,7 +152,7 @@ class Video_Caption_Generator():
         ####### Semantic Mapping ########
         output2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
-        _, output_semantic, _, _, _, _ = self.vae(input_state)
+        _, output_semantic = self.vae(input_state)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
@@ -197,7 +197,7 @@ class Video_Caption_Generator():
         ####### Semantic Mapping ########
         output1 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
-        _, output_semantic, _, _, _, _ = self.vae(input_state)
+        _, output_semantic = self.vae(input_state)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
@@ -243,7 +243,7 @@ def train():
     # graph on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z = model.build_model(train_data, train_video_label, \
-            train_caption_id, train_caption_id_1, train_caption_label)
+            train_caption_id, train_caption_id_1, train_caption_label, drop_sent='random')
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data)
         val_video_tf = model.build_video_generator(val_caption_id_1)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))

@@ -12,6 +12,7 @@ from cocoeval import COCOScorer
 import unicodedata
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 from utils.model_ops import *
+from utils.record_helper import read_and_decode
 
 ###### custom parameters #######
 model_path = '/home/shenxu/V2S-tensorflow/models/att_ip/'
@@ -25,6 +26,7 @@ class Video_Caption_Generator():
         self.dim_hidden = dim_hidden
         self.batch_size = batch_size
         self.n_caption_steps = n_caption_steps
+        self.n_video_steps = n_video_steps
         self.drop_out_rate = drop_out_rate
         self.n_video_steps = n_video_steps
 
@@ -41,6 +43,9 @@ class Video_Caption_Generator():
         self.lstm2_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm2,output_keep_prob=1 - self.drop_out_rate)
         self.lstm3_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm3,output_keep_prob=1 - self.drop_out_rate)
         self.lstm4_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm4,output_keep_prob=1 - self.drop_out_rate)
+
+        self.embed_sem_W = tf.Variable( tf.random_uniform([2*dim_hidden, dim_hidden], -0.1, 0.1), name='embed_sem_W')
+        self.embed_sem_b = tf.Variable( tf.zeros([dim_hidden]), name='embed_sem_b')
 
         self.encode_image_W = tf.Variable( tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1), name='encode_image_W')
         self.encode_image_b = tf.Variable( tf.zeros([dim_hidden]), name='encode_image_b')
@@ -127,23 +132,23 @@ class Video_Caption_Generator():
         with tf.variable_scope("model") as scope:
             # write semantic into memory
             _, state3 = self.lstm3_dropout(tf.concat([output_semantic, output_semantic], axis=1), state3)
-            scope.reuse_variables()
-            for i in xrange(n_caption_steps):
+            for i in xrange(self.n_caption_steps):
                 e = tf.tanh(tf.matmul(sent_prev, self.embed_att_Wa) + image_part) # n x b x h
                 e = tf.reshape(e, [-1, self.dim_hidden])
                 e = tf.matmul(e, self.embed_att_w) # n x b
                 e = tf.reshape(e, [self.n_video_steps, self.batch_size])
     #            e = tf.reduce_sum(e,2) # n x b
-                e_hat_exp = tf.multiply(tf.transpose(video_mask), tf.exp(e)) # n x b 
+                e_hat_exp = tf.multiply(tf.transpose(video_mask), tf.exp(e)) # n x b
                 denomin = tf.reduce_sum(e_hat_exp,0) # b
                 denomin = denomin + tf.to_float(tf.equal(denomin, 0))   # regularize denominator
                 alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h  # normalize to obtain alpha
                 attention_list = tf.multiply(alphas, image_emb) # n x b x h
                 atten = tf.reduce_sum(attention_list,0) # b x h       #  soft-attention weighted sum
+                scope.reuse_variables()
                 with tf.variable_scope("LSTM3"):
                     output3, state3 = self.lstm3_dropout(tf.concat([atten, current_embed], 1), state3) # b x h
 
-                output3_2 = tf.tanh(tf.nn.xw_plus_b(tf.concat([output3,atten,current_embed], 1), 
+                output3_2 = tf.tanh(tf.nn.xw_plus_b(tf.concat([output3,atten,current_embed], 1),
                     self.embed_nn_Wp, self.embed_nn_bp)) # b x h
                 sent_prev = output3 # b x h
                 labels = tf.expand_dims(caption[:,i], 1) # b x 1
@@ -213,7 +218,7 @@ class Video_Caption_Generator():
             scope.reuse_variables()
             # write semantic into memory
             _, state3 = self.lstm3(tf.concat([output_semantic, output_semantic], 1))
-            for i in range(n_caption_step):
+            for i in range(self.n_caption_steps):
                 e = tf.tanh(tf.matmul(h_prev, self.embed_att_Wa) + image_part) # n x b x h
                 e = tf.reshape(e, [-1, self.dim_hidden])
                 e = tf.matmul(e, self.embed_att_w) # n x b
@@ -407,7 +412,8 @@ def test(model_path='models/model-900', video_feat_path=video_feat_path):
             n_words=len(ixtoword),
             dim_hidden=dim_hidden,
             batch_size=batch_size,
-            n_lstm_steps=n_frame_step,
+            n_caption_steps=n_caption_steps,
+            n_videos_steps=n_video_steps,
             drop_out_rate = 0,
             bias_init_vector=None)
 
