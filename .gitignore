@@ -14,3 +14,5 @@ log/
 Att_baseline/
 pycocoevalcap/tokenizer/tmp*
 *.txt
+job/
+*.err
