@@ -331,7 +331,7 @@ def train():
             tf.train.batch([val_data, val_encode_data, val_video_label, val_fname, val_caption_id, val_caption_id_1], batch_size=batch_size, num_threads=1, capacity=2*batch_size)
     # operation on the GPU
     with tf.device("/gpu:0"):
-        tf_loss, tf_loss_caption, tf_loss_video, tf_output_semantic= model.build_model(train_data, train_encode_data, train_caption_id, train_caption_id_1, train_caption_label)
+        tf_loss, tf_loss_caption, tf_loss_latent, tf_loss_video, tf_output_semantic= model.build_model(train_data, train_encode_data, train_caption_id, train_caption_id_1, train_caption_label)
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data, val_video_label)
         val_video_tf, val_lstm4_variables_tf = model.build_video_generator(val_caption_id_1)
 
@@ -368,7 +368,7 @@ def train():
     summary_writer = tf.summary.FileWriter(model_path + 'summary', sess.graph)
     for step in xrange(1, n_steps+1):
         tStart = time.time()
-        _, loss_val, loss_cap, loss_vid, sem = sess.run([train_op, tf_loss, tf_loss_caption, tf_loss_video, tf_output_semantic])
+        _, loss_val, loss_cap, loss_lat, loss_vid, sem = sess.run([train_op, tf_loss, tf_loss_caption, tf_loss_latent, tf_loss_video, tf_output_semantic])
         tStop = time.time()
         print "step:", step, " Loss:", loss_val,
         print "Time Cost:", round(tStop - tStart, 2), "s"
@@ -379,7 +379,7 @@ def train():
             loss_epoch /= n_epoch_steps
             with tf.device("/cpu:0"):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
-            print 'epoch:', epoch, 'loss:', loss_epoch, 'loss_cap:', loss_cap, 'loss_vid:', loss_vid
+            print 'epoch:', epoch, 'loss:', loss_epoch, 'loss_cap:', loss_cap, 'loss_lat:', loss_lat, 'loss_vid:', loss_vid
             print 'sem:', sem[0, :10]
             loss_epoch = 0
             ######### test sentence generation ##########
