@@ -282,7 +282,7 @@ def train():
     # graph on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z = model.build_model(train_data, train_video_label, \
-            train_caption_id, train_caption_id_1, train_caption_label, drop_sent='random')
+            train_caption_id, train_caption_id_1, train_caption_label, drop_sent='keep', video_weight=1.)
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data)
         val_video_tf, val_lstm4_variables_tf = model.build_video_generator(val_caption_id_1)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))

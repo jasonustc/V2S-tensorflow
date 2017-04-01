@@ -24,7 +24,7 @@ home_folder = '/home/shenxu/V2S-tensorflow/'
 
 ############## Train Parameters #################
 dim_image = 4096*2
-dim_hidden= 512*2
+dim_hidden= 512
 n_video_steps = 45
 n_caption_steps = 35
 n_epochs = 200

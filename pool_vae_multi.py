@@ -194,27 +194,28 @@ class Video_Caption_Generator():
         ####### Decoding ########
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        state4 = (c_init, m_init) # n x 2 x h
-        image_emb = tf.zeros([self.batch_size, self.dim_hidden])
+        state3 = (c_init, m_init) # n x 2 x h
+        current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
 
-        generated_images = []
+        generated_words = []
 
         with tf.variable_scope("model") as scope:
             scope.reuse_variables()
-            with tf.variable_scope("LSTM4"):
-                _, state4 = self.lstm4(output_semantic, state4)
-            for i in range(self.n_video_steps):
-                with tf.variable_scope("LSTM4") as vs:
-                    output4, state4 = self.lstm4(image_emb, state4) # b x h
-                    lstm4_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
-
-                image_prev = tf.nn.xw_plus_b(output4, self.decode_image_W, self.decode_image_b)
-                image_emb = tf.nn.xw_plus_b(image_prev, self.encode_image_W, self.encode_image_b)
-                generated_images.append(image_prev) # b x d_im
+            with tf.variable_scope("LSTM3"):
+                _, state3 = self.lstm3_dropout(output_semantic, state3) # b x h
+            for i in range(self.n_caption_steps):
+                with tf.variable_scope("LSTM3") as vs:
+                    output3, state3 = self.lstm3(current_embed, state3 ) # b x h
+                    lstm3_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
+                logit_words = tf.nn.xw_plus_b(output3, self.embed_word_W, self.embed_word_b) # b x w
+                max_prob_index = tf.argmax(logit_words, 1) # b
+                generated_words.append(max_prob_index) # b
+                with tf.device("/cpu:0"):
+                    current_embed = tf.nn.embedding_lookup(self.Wemb, max_prob_index)
         ####### Decoding ########
 
-        generated_images = tf.transpose(tf.stack(generated_images), [1, 0, 2]) # b x n_video_step x d_im
-        return generated_images, lstm4_variables
+        generated_words = tf.transpose(tf.stack(generated_words)) # n_caption_step x 1
+        return generated_words, lstm3_variables
 
     def build_video_generator(self, sent_1, sent_2, sent_3, sent_4, sent_5):
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h

@@ -12,6 +12,8 @@ from cocoeval import COCOScorer
 import unicodedata
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 from modules.variational_autoencoder import VAE
+from utils.model_ops import *
+from utils.record_helper import read_and_decode
 
 ###### custom parameters #######
 model_path = '/home/shenxu/V2S-tensorflow/models/att_vae/'
@@ -135,8 +137,8 @@ class Video_Caption_Generator():
                 e = tf.reshape(e, [-1, self.dim_hidden])
                 e = tf.matmul(e, self.embed_att_w) # n x b
                 e = tf.reshape(e, [self.n_video_steps, self.batch_size])
-    #            e = tf.reduce_sum(e,2) # n x b
-                e_hat_exp = tf.multiply(tf.transpose(video_mask), tf.exp(e)) # n x b 
+#                e = tf.reduce_sum(e,2) # n x b
+                e_hat_exp = tf.multiply(tf.transpose(video_mask), tf.exp(e)) # n x b
                 denomin = tf.reduce_sum(e_hat_exp,0) # b
                 denomin = denomin + tf.to_float(tf.equal(denomin, 0))   # regularize denominator
                 alphas = tf.tile(tf.expand_dims(tf.div(e_hat_exp,denomin),2),[1,1,self.dim_hidden]) # n x b x h  # normalize to obtain alpha
@@ -147,7 +149,7 @@ class Video_Caption_Generator():
                 with tf.variable_scope("LSTM3"):
                     output3, state3 = self.lstm3_dropout(tf.concat([atten, current_embed], 1), state3) # b x h
 
-                output3_2 = tf.tanh(tf.nn.xw_plus_b(tf.concat([output3,atten,current_embed], 1), 
+                output3_2 = tf.tanh(tf.nn.xw_plus_b(tf.concat([output3,atten,current_embed], 1),
                     self.embed_nn_Wp, self.embed_nn_bp)) # b x h
                 sent_prev = output3 # b x h
                 labels = tf.expand_dims(caption[:,i], 1) # b x 1
@@ -175,8 +177,8 @@ class Video_Caption_Generator():
                     output4, state4 = self.lstm4_dropout(video_prev, state4)
                 decode_image = tf.nn.xw_plus_b(output4, self.decode_image_W, self.decode_image_b) # b x d_im
                 video_prev = image_emb[i, :, :] # b x h
-                euclid_loss = tf.reduce_sum(tf.square(tf.subtract(decode_image, video[:,i,:])), 
-                    axis=1, keep_dims=True) # b x 1 
+                euclid_loss = tf.reduce_sum(tf.square(tf.subtract(decode_image, video[:,i,:])),
+                    axis=1, keep_dims=True) # b x 1
                 euclid_loss = euclid_loss * video_mask[:, i] # b x 1
                 loss_video += tf.reduce_sum(euclid_loss) # 1
 
@@ -226,7 +228,7 @@ class Video_Caption_Generator():
                 e = tf.reshape(e, [-1, self.dim_hidden])
                 e = tf.matmul(e, self.embed_att_w) # n x b
                 e = tf.reshape(e, [self.n_video_steps, self.batch_size])
-    #            e = tf.reduce_sum(e,2) # n x b
+#                e = tf.reduce_sum(e,2) # n x b
                 e_hat_exp = tf.multiply(tf.transpose(video_mask), tf.exp(e)) # n x b
                 denomin = tf.reduce_sum(e_hat_exp,0) # b
                 denomin = denomin + tf.to_float(tf.equal(denomin, 0))
@@ -331,7 +333,7 @@ def train():
             tf.train.batch([val_data, val_encode_data, val_video_label, val_fname, val_caption_id, val_caption_id_1], batch_size=batch_size, num_threads=1, capacity=2*batch_size)
     # operation on the GPU
     with tf.device("/gpu:0"):
-        tf_loss, tf_loss_caption, tf_loss_latent, tf_loss_video, tf_output_semantic= model.build_model(train_data, train_encode_data, train_caption_id, train_caption_id_1, train_caption_label)
+        tf_loss, tf_loss_caption, tf_loss_latent, tf_loss_video, tf_output_semantic= model.build_model(train_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data, val_video_label)
         val_video_tf, val_lstm4_variables_tf = model.build_video_generator(val_caption_id_1)
 
@@ -444,9 +446,6 @@ def test(model_path='models/model-900', video_feat_path=video_feat_path):
 if __name__ == '__main__':
     args = parse_args()
     if args.task == 'train':
-        with tf.device('/gpu:'+str(args.gpu_id)):
-            print 'using gpu:', args.gpu_id
-            train()
+        train()
     elif args.task == 'test':
-        with tf.device('/gpu:'+str(args.gpu_id)):
-            total_score = test(model_path = args.model)
+        total_score = test(model_path = args.model)
