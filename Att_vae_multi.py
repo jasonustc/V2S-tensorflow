@@ -410,7 +410,7 @@ def train():
         tStart = time.time()
         _, loss_val, loss_cap, loss_lat, loss_vid, sem = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z])
         tStop = time.time()
-        print "step:", step, " Loss:", loss_val,
+        print "step:", step, " Loss:", loss_val, "loss_cap:", loss_cap, "loss_lat:", loss_lat, "loss_vid:", loss_vid
         print "Time Cost:", round(tStop - tStart, 2), "s"
         loss_epoch += loss_val
 
