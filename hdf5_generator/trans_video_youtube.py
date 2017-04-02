@@ -380,9 +380,8 @@ def getlist(feature_folder_name, split):
 
 
 if __name__ == '__main__':
-    dataset = np.load('msvd_dataset.npz')
+    dataset = np.load('msrvtt_dataset.npz')
     wordtoix, _ = build_vocab(dataset['train'])
-    pdb.set_trace()
     trans_video_msrvtt_record(dataset['train'], 'train', vgg_feat_name, c3d_feat_name, wordtoix)
     trans_video_msrvtt_record(dataset['val'], 'val', vgg_feat_name, c3d_feat_name, wordtoix)
 #    trans_video_youtube_record(dataset['test'], 'test', vgg_feat_name, c3d_feat_name, wordtoix)
