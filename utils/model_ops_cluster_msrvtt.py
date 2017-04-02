@@ -2,7 +2,7 @@
 import tensorflow as tf
 import pandas as pd
 import numpy as np
-import os, h5py, sys, argparse
+import os, h5py, sys, argparse, re
 import pdb
 import time
 import json
@@ -10,14 +10,13 @@ from collections import defaultdict
 #from keras.preprocessing import sequence
 from cocoeval import COCOScorer
 import unicodedata
-import re
 
 ############### Global Parameters ###############
-video_data_path_train = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/train.tfrecords'
-video_data_path_val = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/val.tfrecords'
-video_data_path_test = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/test.tfrecords'
+video_data_path_train = '/data11/shenxu/msrvtt_feat_vgg_c3d_batch/train.tfrecords'
+video_data_path_val = '/data11/shenxu/msrvtt_feat_vgg_c3d_batch/val.tfrecords'
+video_data_path_test = None
 # seems to be no use
-video_feat_path = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
+video_feat_path = '/data11/shenxu/msrvtt_feat_vgg_c3d_batch/'
 
 #model_path = '/Users/shenxu/Code/V2S-tensorflow/data0/models/'
 test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
@@ -29,18 +28,16 @@ dim_hidden= 512
 n_video_steps = 45
 n_caption_steps = 35
 n_epochs = 200
-batch_size = 100
-learning_rate = 0.0001
+batch_size = 256
+learning_rate = 0.001
 num_threads = 3
 min_queue_examples = batch_size
 prefetch = num_threads * batch_size + min_queue_examples
 clip_norm = 35
-n_train_samples = 49659
-n_val_samples = 4149
-n_test_samples = 27020
+n_train_samples = 130175
+n_val_samples = 9933
+n_test_samples = None
 ##################################################
-
-######### general operations #####################
 def get_model_step(model_path):
     assert os.path.isfile(model_path)
     MODEL_REGEX = r'model-(\d+)'
@@ -90,7 +87,6 @@ def parse_args():
 
     args = parser.parse_args()
     return args
-
 
 def get_video_data(video_data_path, video_feat_path, train_ratio=0.9):
     video_data = pd.read_csv(video_data_path, sep=',')
@@ -193,9 +189,6 @@ def preProBuildLabel():
         ixtoword[ix] = w
         ix += 1
     return wordtoix, ixtoword
-######### general operations #####################
-
-######## testing related functions ###############
 
 def testing_one(sess, ixtoword, caption_tf, fname_tf, counter):
     pred_sent = []
@@ -260,4 +253,3 @@ def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf):
         avg_loss += np.sum(loss) / gt_images.shape[0]
     return avg_loss / n_steps
 
-######## testing related functions ###############
