@@ -3,8 +3,7 @@
 #     File Name           :     get_list.py
 #     Created By          :     shenxu
 #     Creation Date       :     [2017-03-01 09:07]
-#     Last Modified       :     [2017-03-19 17:40]
-#     Description         :      
+#     Last Modified       :     [2017-04-01 12:56]
 #################################################################################
 import os
 import pdb
@@ -92,10 +91,30 @@ def build_list(batch_folder):
     for dataset in datasets:
         with open(os.path.join(batch_folder, dataset + '_vn.txt'), 'w') as of:
             for f in os.listdir(batch_folder):
-                if f.startswith(dataset) and f.endswith('.h5'): 
+                if f.startswith(dataset) and f.endswith('.h5'):
                     of.write(os.path.join(batch_folder, f) + '\n')
             of.close()
 
+def build_msrvtt_list(train_folder, val_folder):
+    assert os.path.isdir(train_folder)
+    assert os.path.isdir(val_folder)
+    train_list = os.listdir(train_folder)
+    val_list = os.listdir(val_folder)
+    np.savez('msrvtt_dataset',train=train_list, val=val_list)
+
+def build_msrvtt_v2s_json(v2s_json):
+    assert os.path.isfile(v2s_json)
+    re = json.load(open(v2s_json))
+    sentences = re['sentences']
+    v2s = {}
+    for item in sentences:
+        video_id = item['video_id']
+        caption = item['caption']
+        cap_list = v2s.get(video_id, [])
+        cap_list.append(caption)
+        v2s[video_id] = cap_list
+    with open('msrvtt2sent.json', 'w') as fp:
+        json.dump(v2s, fp)
 
 if __name__ == '__main__':
 #    splitdata('/disk_new/XuKS/YouTubeClips', 1200, 100)
@@ -113,4 +132,6 @@ if __name__ == '__main__':
 #            if count % 100 == 0:
 #                print count
 #    print count
-    build_list('/data6/shenxu/v2s_data/msvd_feat_vgg_c3d_batch/')
+#    build_list('/data6/shenxu/v2s_data/msvd_feat_vgg_c3d_batch/')
+#    build_msrvtt_list('/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_train/', '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_val/')
+    build_msrvtt_v2s_json('/disk_2T/XuKS/msr-vtt/train_val_annotation/train_val_videodatainfo.json')

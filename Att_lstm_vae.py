@@ -12,6 +12,8 @@ from cocoeval import COCOScorer
 import unicodedata
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 from modules.variational_autoencoder import VAE
+from utils.model_ops import *
+from utils.record_helper import read_and_decode
 
 ###### custom parameters #######
 model_path = '/home/shenxu/V2S-tensorflow/models/att_lstm_vae/'
@@ -200,7 +202,8 @@ class Video_Caption_Generator():
         return loss, loss_caption, loss_latent, loss_video, output_semantic
 
 
-    def build_sent_generator(self, video, encode_video):
+    def build_sent_generator(self, video, encode_video, video_mask):
+        video_mask = tf.cast(video_mask, tf.float32)
         # for decoding
         video_flat = tf.reshape(video, [-1, self.dim_image]) # (b x nv) x d
         image_emb = tf.nn.xw_plus_b( video_flat, self.encode_image_W, self.encode_image_b) # (b x nv) x h
@@ -352,8 +355,8 @@ def train():
     # operation on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_caption, tf_loss_latent, tf_loss_video, tf_output_semantic = \
-            model.build_model(train_data, train_encode_data, train_caption_id, train_caption_id_1, train_caption_label)
-        val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data, val_encode_data)
+            model.build_model(train_data, train_encode_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
+        val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data, val_encode_data, val_video_label)
         val_video_tf, val_lstm4_variables_tf = model.build_video_generator(val_caption_id_1)
 
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
@@ -429,7 +432,7 @@ def train():
     tStop_total = time.time()
     print "Total Time Cost:", round(tStop_total - tStart_total,2), "s"
     sess.close()
-    
+
 def test(model_path='models/model-900', video_feat_path=video_feat_path):
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
 #    test_data = val_data   # to evaluate on testing data or validation data
@@ -465,9 +468,6 @@ def test(model_path='models/model-900', video_feat_path=video_feat_path):
 if __name__ == '__main__':
     args = parse_args()
     if args.task == 'train':
-        with tf.device('/gpu:'+str(args.gpu_id)):
-            print 'using gpu:', args.gpu_id
-            train()
+        train()
     elif args.task == 'test':
-        with tf.device('/gpu:'+str(args.gpu_id)):
-            total_score = test(model_path = args.model)
+        total_score = test(model_path = args.model)
