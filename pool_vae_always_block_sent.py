@@ -15,7 +15,7 @@ from modules.variational_autoencoder import VAE
 from utils.model_ops import *
 from utils.record_helper import read_and_decode
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae/'
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_always_block_sent/'
 learning_rate = 0.0001
 #### custom parameters #####
 
@@ -251,7 +251,7 @@ def train():
     assert os.path.isfile(video_data_path_train)
     assert os.path.isfile(video_data_path_val)
     print 'load meta data...'
-    wordtoix = np.load(home_folder + 'data0/wordtoix.npy').tolist()
+    wordtoix = np.load(home_folder + 'data0/msvd_wordtoix.npy').tolist()
     print 'build model and session...'
     # shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -283,7 +283,7 @@ def train():
     # graph on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z = model.build_model(train_data, train_video_label, \
-            train_caption_id, train_caption_id_1, train_caption_label, drop_sent='keep', video_weight=1.)
+            train_caption_id, train_caption_id_1, train_caption_label, drop_sent='totally', video_weight=0.)
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data)
         val_video_tf, val_lstm4_variables_tf = model.build_video_generator(val_caption_id_1)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
@@ -291,10 +291,13 @@ def train():
     with tf.device("/cpu:0"):
         saver = tf.train.Saver(max_to_keep=100)
     ckpt = tf.train.get_checkpoint_state(model_path)
+    global_step = 0
     if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
         saver.restore(sess, ckpt.model_checkpoint_path)
-        print_tensors_in_checkpoint_file(ckpt.model_checkpoint_path, "", True)
+#        print_tensors_in_checkpoint_file(ckpt.model_checkpoint_path, "", True)
+        global_step = get_model_step(ckpt.model_checkpoint_path)
+        print 'global_step:', global_step
     else:
         print("Created model with fresh parameters.")
         sess.run(tf.global_variables_initializer())
@@ -317,24 +320,27 @@ def train():
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     # write graph architecture to file
     summary_writer = tf.summary.FileWriter(model_path + 'summary', sess.graph)
+    epoch = global_step
+    tf.summary.scalar('loss_cap', tf_loss_cap)
+    tf.summary.scalar('loss_vid', tf_loss_vid)
     for step in xrange(1, n_steps+1):
         tStart = time.time()
-        _, loss_val, loss_cap, loss_lat, loss_vid, z = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z])
+        _, loss_val, loss_cap, loss_lat, loss_vid = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid])
         tStop = time.time()
-        print "step:", step, " Loss:", loss_val,
+        print "step:", step, " Loss:", loss_val, "loss_cap:", loss_cap, "loss_lat:", loss_lat, "loss_vid:", loss_vid
         print "Time Cost:", round(tStop - tStart, 2), "s"
         loss_epoch += loss_val
 
-        if step % n_epoch_steps == 0:
-            epoch = step / n_epoch_steps
+        if step % (2 * n_epoch_steps) == 0:
+            epoch += 1
             loss_epoch /= n_epoch_steps
             with tf.device("/cpu:0"):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
-            print 'z:', z[0, :10]
+#            print 'z:', z[0, :10]
             print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_cap, "loss_lat:",loss_lat, "loss_vid:", loss_vid
             loss_epoch = 0
             ######### test sentence generation ##########
-            ixtoword = pd.Series(np.load(home_folder + 'data0/ixtoword.npy').tolist())
+            ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
             n_val_steps = int(n_val_samples / batch_size)
             [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_caption_tf, val_fname)
             for key in pred_dict.keys():
@@ -346,7 +352,8 @@ def train():
             scorer = COCOScorer()
             total_score = scorer.score(gt_dict, pred_dict, id_list)
             ######### test video generation #############
-            mse = test_all_videos(sess, n_val_steps, val_data, val_video_tf)
+#            mse = test_all_videos(sess, n_val_steps, val_data, val_video_tf)
+#            print 'video mse:', mse
             sys.stdout.flush()
 
         sys.stdout.flush()
@@ -363,7 +370,7 @@ def train():
 def test(model_path='models/model-900', video_feat_path=video_feat_path):
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
 #    test_data = val_data   # to evaluate on testing data or validation data
-    ixtoword = pd.Series(np.load('./data0/ixtoword.npy').tolist())
+    ixtoword = pd.Series(np.load('./data0/msvd_ixtoword.npy').tolist())
 
     model = Video_Caption_Generator(
             dim_image=dim_image,

@@ -29,7 +29,7 @@ dim_hidden= 512
 n_video_steps = 45
 n_caption_steps = 35
 n_epochs = 200
-batch_size = 100
+batch_size = 128
 learning_rate = 0.0001
 num_threads = 3
 min_queue_examples = batch_size
@@ -42,7 +42,7 @@ n_test_samples = 27020
 
 ######### general operations #####################
 def get_model_step(model_path):
-    assert os.path.isfile(model_path)
+#    assert os.path.isfile(model_path)
     MODEL_REGEX = r'model-(\d+)'
     model_file = os.path.basename(model_path)
     find = re.match(MODEL_REGEX, model_file)

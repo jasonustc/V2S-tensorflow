@@ -15,8 +15,8 @@ from modules.variational_autoencoder import VAE
 from utils.model_ops import *
 from utils.record_helper import read_and_decode
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae/'
-learning_rate = 0.0001
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_begin_block_sent/'
+learning_rate = 0.00001
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -283,7 +283,7 @@ def train():
     # graph on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z = model.build_model(train_data, train_video_label, \
-            train_caption_id, train_caption_id_1, train_caption_label, drop_sent='keep', video_weight=1.)
+            train_caption_id, train_caption_id_1, train_caption_label, drop_sent='totally', video_weight=0.)
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data)
         val_video_tf, val_lstm4_variables_tf = model.build_video_generator(val_caption_id_1)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
@@ -317,11 +317,12 @@ def train():
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     # write graph architecture to file
     summary_writer = tf.summary.FileWriter(model_path + 'summary', sess.graph)
+    tf.summary.scalar('loss_cap', tf_loss_cap)
     for step in xrange(1, n_steps+1):
         tStart = time.time()
-        _, loss_val, loss_cap, loss_lat, loss_vid, z = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z])
+        _, loss_val, loss_cap, loss_lat, loss_vid = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid])
         tStop = time.time()
-        print "step:", step, " Loss:", loss_val,
+        print "step:", step, " Loss:", loss_val, 'loss_cap:', loss_cap, 'loss_lat:', loss_lat, 'loss_vid:', loss_vid
         print "Time Cost:", round(tStop - tStart, 2), "s"
         loss_epoch += loss_val
 
@@ -330,7 +331,7 @@ def train():
             loss_epoch /= n_epoch_steps
             with tf.device("/cpu:0"):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
-            print 'z:', z[0, :10]
+#            print 'z:', z[0, :10]
             print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_cap, "loss_lat:",loss_lat, "loss_vid:", loss_vid
             loss_epoch = 0
             ######### test sentence generation ##########
@@ -346,7 +347,8 @@ def train():
             scorer = COCOScorer()
             total_score = scorer.score(gt_dict, pred_dict, id_list)
             ######### test video generation #############
-            mse = test_all_videos(sess, n_val_steps, val_data, val_video_tf)
+#            mse = test_all_videos(sess, n_val_steps, val_data, val_video_tf)
+#            print 'video mse:', mse
             sys.stdout.flush()
 
         sys.stdout.flush()
