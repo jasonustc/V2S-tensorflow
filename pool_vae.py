@@ -385,10 +385,12 @@ def train():
     with tf.device("/cpu:0"):
         saver = tf.train.Saver(max_to_keep=100)
     ckpt = tf.train.get_checkpoint_state(model_path)
+    global_step = 0
     if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
         saver.restore(sess, ckpt.model_checkpoint_path)
         print_tensors_in_checkpoint_file(ckpt.model_checkpoint_path, "", True)
+        global_step = get_model_step(ckpt.model_checkpoint_path)
     else:
         print("Created model with fresh parameters.")
         sess.run(tf.global_variables_initializer())
@@ -411,6 +413,7 @@ def train():
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     # write graph architecture to file
     summary_writer = tf.summary.FileWriter(model_path + 'summary', sess.graph)
+    epoch = global_step
     for step in xrange(1, n_steps+1):
         tStart = time.time()
         _, loss_val, loss_cap, loss_lat, loss_vid, z = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z])
@@ -420,11 +423,11 @@ def train():
         loss_epoch += loss_val
 
         if step % n_epoch_steps == 0:
-            epoch = step / n_epoch_steps
+            epoch += 1
             loss_epoch /= n_epoch_steps
             with tf.device("/cpu:0"):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
-            print 'z:', z[0, :10]
+#            print 'z:', z[0, :10]
             print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_cap, "loss_lat:",loss_lat, "loss_vid:", loss_vid
             loss_epoch = 0
             ######### test sentence generation ##########
