@@ -16,7 +16,9 @@ from utils.model_ops_cluster_msrvtt import *
 from utils.record_helper import read_and_decode
 
 #### custom parameters #####
-model_path = '/data11/shenxu/msrvtt_models/pool_vae/'
+model_path = '/data11/shenxu/msrvtt_models/pool_vae_s2v/'
+learning_rate = 0.01
+batch_size = 1024
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -91,13 +93,13 @@ class Video_Caption_Generator():
 
         ######## Dropout Stage #########
         if drop_sent == 'totally':
-            output2 = tf.constant(0) * output2
+            output2 = tf.constant(0.) * output2
             output2 = tf.stop_gradient(output2)
         elif drop_sent == 'random':
             coeff = tf.floor(tf.random_uniform([1], 0, 1) + 0.5)
             output2 = coeff * output2
         if drop_video == 'totally':
-            output1 = tf.constant(0) * output1
+            output1 = tf.constant(0.) * output1
             output1 = tf.stop_gradient(output1)
         elif drop_video == 'random':
             coeff = tf.floor(tf.random_uniform([1], 0, 1) + 0.5)
@@ -286,7 +288,7 @@ def train():
     # graph on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z = model.build_model(train_data, train_video_label, \
-            train_caption_id, train_caption_id_1, train_caption_label, drop_sent='keep', video_weight=1.)
+            train_caption_id, train_caption_id_1, train_caption_label, drop_sent='keep', drop_video='totally', video_weight=1., caption_weight=0.)
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_data)
         val_video_tf, val_lstm4_variables_tf = model.build_video_generator(val_caption_id_1)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
@@ -340,20 +342,21 @@ def train():
 #            print 'z:', z[0, :10]
             print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_cap, "loss_lat:",loss_lat, "loss_vid:", loss_vid
             loss_epoch = 0
-            ######### test sentence generation ##########
-            ixtoword = pd.Series(np.load(home_folder + 'data0/msrvtt_ixtoword.npy').tolist())
             n_val_steps = int(n_val_samples / batch_size)
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_caption_tf, val_fname)
-            for key in pred_dict.keys():
-                for ele in gt_dict[key]:
-                    print "GT:  " + ele['caption']
-                print "PD:  " + pred_dict[key][0]['caption']
-                print '-------'
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_caption_tf, val_fname)
-            scorer = COCOScorer()
-            total_score = scorer.score(gt_dict, pred_dict, id_list)
+            ######### test sentence generation ##########
+#            ixtoword = pd.Series(np.load(home_folder + 'data0/msrvtt_ixtoword.npy').tolist())
+#            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_caption_tf, val_fname)
+#            for key in pred_dict.keys():
+#                for ele in gt_dict[key]:
+#                    print "GT:  " + ele['caption']
+#                print "PD:  " + pred_dict[key][0]['caption']
+#                print '-------'
+#            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_caption_tf, val_fname)
+#            scorer = COCOScorer()
+#            total_score = scorer.score(gt_dict, pred_dict, id_list)
             ######### test video generation #############
             mse = test_all_videos(sess, n_val_steps, val_data, val_video_tf)
+            print 'video mse:', mse
             sys.stdout.flush()
 
         sys.stdout.flush()

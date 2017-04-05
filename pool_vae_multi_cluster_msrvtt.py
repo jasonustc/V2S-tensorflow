@@ -17,6 +17,8 @@ from utils.record_helper import read_and_decode
 
 #### custom parameters #####
 model_path = '/data11/shenxu/msrvtt_models/pool_vae_multi/'
+batch_size = 256
+learning_rate = 0.001
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -328,7 +330,7 @@ def train():
         saver = tf.train.Saver(max_to_keep=100)
     ckpt = tf.train.get_checkpoint_state(model_path)
     global_step = 0
-    if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
+    if ckpt and os.path.isfile(ckpt.model_checkpoint_path):
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
         saver.restore(sess, ckpt.model_checkpoint_path)
         global_step = get_model_step(ckpt.model_checkpoint_path)
@@ -362,7 +364,7 @@ def train():
     for step in xrange(1, n_steps+1):
         tStart = time.time()
 #        _, loss_val, loss_cap, loss_lat, loss_vid = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid])
-        _, loss_val, loss_cap, loss_lat, loss_vid, z = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z])
+        _, loss_val, loss_cap, loss_lat, loss_vid = sess.run([train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid])
         tStop = time.time()
         print "step:", step, " Loss:", loss_val, "loss_cap:", loss_cap, "loss_lat:", loss_lat, "loss_vid:", loss_vid
         print "Time Cost:", round(tStop - tStart, 2), "s"
@@ -373,7 +375,7 @@ def train():
             loss_epoch /= n_epoch_steps
             with tf.device("/cpu:0"):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
-            print 'z:', z[0, :10]
+#            print 'z:', z[0, :10]
             print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_cap, "loss_lat:",loss_lat, "loss_vid:", loss_vid
             loss_epoch = 0
             ######### test sentence generation ##########
@@ -390,6 +392,7 @@ def train():
             total_score = scorer.score(gt_dict, pred_dict, id_list)
             ######### test video generation #############
             mse = test_all_videos(sess, n_val_steps, val_data, val_video_tf)
+            print 'epoch:', epoch, 'mse:', mse
             sys.stdout.flush()
 
         sys.stdout.flush()

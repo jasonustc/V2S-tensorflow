@@ -14,6 +14,7 @@ import unicodedata
 from modules.variational_autoencoder_cluster import VAE
 from utils.model_ops_cluster_msrvtt import *
 from utils.record_helper import read_and_decode
+
 #### custom parameters #####
 model_path = '/data11/shenxu/msrvtt_models/pool_vae_1024/'
 batch_size = 1024

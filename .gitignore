@@ -16,3 +16,4 @@ pycocoevalcap/tokenizer/tmp*
 *.txt
 job/
 *.err
+*.tmp*

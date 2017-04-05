@@ -196,7 +196,7 @@ def testing_one(sess, ixtoword, caption_tf, fname_tf, counter):
     IDs = []
     namelist = []
     #print video_feat_path
-    gt_captions = json.load(open(home_folder + 'msvd2sent.json'))
+    gt_captions = json.load(open(home_folder + 'data0/msrvtt2sent.json'))
 
     generated_word_index, fname = sess.run([caption_tf, fname_tf])
     for ind in xrange(batch_size):
