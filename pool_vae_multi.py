@@ -105,13 +105,13 @@ class Video_Caption_Generator():
 
         ######## Dropout Stage #########
         if drop_sent == 'totally':
-            output2 = tf.constant(0) * output2
+            output2 = tf.constant(0.) * output2
             output2 = tf.stop_gradient(output2)
         elif drop_sent == 'random':
             coeff = tf.floor(tf.random_uniform([1], 0, 1) + 0.5)
             output2 = coeff * output2
         if drop_video == 'totally':
-            output1 = tf.constant(0) * output1
+            output1 = tf.constant(0.) * output1
             output1 = tf.stop_gradient(output1)
         elif drop_video == 'random':
             coeff = tf.floor(tf.random_uniform([1], 0, 1) + 0.5)
