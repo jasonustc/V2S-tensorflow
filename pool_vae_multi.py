@@ -480,11 +480,21 @@ def train():
                     print "GT:  " + ele['caption']
                 print "PD:  " + pred_dict[key][0]['caption']
                 print '-------'
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_caption_tf, val_fname)
+            print '############## video to sentence result ################'
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_v2s_tf, val_fname)
             scorer = COCOScorer()
             total_score = scorer.score(gt_dict, pred_dict, id_list)
+            print '############## video to sentence result ################'
+            print '############## sentence to sentence result ################'
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_s2s_tf, val_fname)
+            scorer = COCOScorer()
+            total_score = scorer.score(gt_dict, pred_dict, id_list)
+            print '############## sentence to sentence result ################'
             ######### test video generation #############
-            mse = test_all_videos(sess, n_val_steps, val_data, val_video_tf)
+            mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf)
+            print 'mse_s2v:', mse_s2v
+            mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf)
+            print 'mse_v2v:', mse_v2v
             sys.stdout.flush()
 
         sys.stdout.flush()
