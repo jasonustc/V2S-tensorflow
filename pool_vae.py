@@ -65,7 +65,7 @@ class Video_Caption_Generator():
         else:
             self.embed_word_b = tf.Variable(tf.zeros([n_words]), name='embed_word_b')
 
-    def build_model(self, video, video_mask, caption, caption_1, caption_mask, drop_type=0):
+    def build_model(self, video, video_mask, caption, caption_1, caption_mask):
         drop_type = tf.placeholder(tf.int32, shape=[])
         caption_mask = tf.cast(caption_mask, tf.float32)
         video_mask = tf.cast(video_mask, tf.float32)
