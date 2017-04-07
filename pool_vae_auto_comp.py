@@ -102,7 +102,7 @@ class Video_Caption_Generator():
         ######## tied loss #########
         vh_pred = tf.nn.tanh(tf.nn.xw_plus_b(output2, self.vs_W, self.v_bias))
         loss_tied_1 = tf.reduce_sum(tf.square(tf.subtract(output1, vh_pred))) / self.batch_size
-        sh_pred - tf.nn.tanh(tf.nn.xw_plus_b(output1, self.vs_W, self.s_bias))
+        sh_pred = tf.nn.tanh(tf.nn.xw_plus_b(output1, self.vs_W, self.s_bias))
         loss_tied_2 = tf.reduce_sum(tf.square(tf.subtract(output2, sh_pred))) / self.batch_size
         loss_tied = loss_tied_1 + loss_tied_2
 
