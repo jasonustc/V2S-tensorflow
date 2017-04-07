@@ -18,7 +18,6 @@ from utils.record_helper import read_and_decode
 #### custom parameters #####
 model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_tied_msvd/'
 learning_rate = 0.001
-batch_size = 100
 caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01

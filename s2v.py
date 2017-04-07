@@ -18,8 +18,7 @@ from utils.record_helper import read_and_decode
 #### custom parameters #####
 model_path = '/home/shenxu/V2S-tensorflow/models/s2v/'
 learning_rate = 0.0001
-batch_size = 100
-cpu_device = '/cpu:2'
+cpu_device = '/cpu:3'
 video_data_path_train = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/train.tfrecords'
 video_data_path_val = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/val.tfrecords'
 video_data_path_test = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/test.tfrecords'

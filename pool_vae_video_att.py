@@ -19,13 +19,16 @@ import random
 #### custom parameters #####
 model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_video_att/'
 learning_rate = 0.001
-batch_size = 100
 # 'block_video', 'block_sent', 'random', 'keep'
 drop_strategy = 'keep'
 caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01
 cpu_device = "/cpu:2"
+test_v2s = True
+test_v2v = True
+test_s2s = True
+test_s2v = True
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -469,41 +472,45 @@ def train():
             ixtoword = pd.Series(np.load(home_folder + 'data0/ixtoword.npy').tolist())
             n_val_steps = int(n_val_samples / batch_size)
             ### TODO: sometimes COCO test show exceptions in the beginning of training ####
-            try:
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
-                for key in pred_dict.keys():
-                    for ele in gt_dict[key]:
-                        print "GT:  " + ele['caption']
-                    print "PD:  " + pred_dict[key][0]['caption']
-                    print '-------'
-                print '############## video to sentence result #################'
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_v2s_tf, val_fname)
-                scorer = COCOScorer()
-                total_score = scorer.score(gt_dict, pred_dict, id_list)
-                print '############## video to sentence result #################'
-            except Exception, e:
-                print 'epoch:', epoch, 'v2s Bleu test exception'
+            if test_v2s:
+                try:
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
+                    for key in pred_dict.keys():
+                        for ele in gt_dict[key]:
+                            print "GT:  " + ele['caption']
+                        print "PD:  " + pred_dict[key][0]['caption']
+                        print '-------'
+                    print '############## video to sentence result #################'
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_v2s_tf, val_fname)
+                    scorer = COCOScorer()
+                    total_score = scorer.score(gt_dict, pred_dict, id_list)
+                    print '############## video to sentence result #################'
+                except Exception, e:
+                    print 'epoch:', epoch, 'v2s Bleu test exception'
 
-            try:
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
-                for key in pred_dict.keys():
-                    for ele in gt_dict[key]:
-                        print "GT:  " + ele['caption']
-                    print "PD:  " + pred_dict[key][0]['caption']
-                    print '-------'
-                print '############## sentence to sentence result #################'
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_s2s_tf, val_fname)
-                scorer = COCOScorer()
-                total_score = scorer.score(gt_dict, pred_dict, id_list)
-                print '############## sentence to sentence result #################'
-            except Exception, e:
-                print 'epoch', epoch, 's2s Bleu test exception'
+            if test_s2s:
+                try:
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
+                    for key in pred_dict.keys():
+                        for ele in gt_dict[key]:
+                            print "GT:  " + ele['caption']
+                        print "PD:  " + pred_dict[key][0]['caption']
+                        print '-------'
+                    print '############## sentence to sentence result #################'
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_s2s_tf, val_fname)
+                    scorer = COCOScorer()
+                    total_score = scorer.score(gt_dict, pred_dict, id_list)
+                    print '############## sentence to sentence result #################'
+                except Exception, e:
+                    print 'epoch', epoch, 's2s Bleu test exception'
 
             ######### test video generation #############
-            mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf)
-            print 'epoch', epoch, 'video2video mse:', mse_v2v
-            mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf)
-            print 'epoch', epoch, 'caption2video mse:', mse_s2v
+            if test_v2v:
+                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf)
+                print 'epoch', epoch, 'video2video mse:', mse_v2v
+            if test_s2v:
+                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf)
+                print 'epoch', epoch, 'caption2video mse:', mse_s2v
             sys.stdout.flush()
 
             ###### summary ######
