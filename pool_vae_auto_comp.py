@@ -16,7 +16,7 @@ from utils.model_ops import *
 from utils.record_helper import read_and_decode
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_tied_msvd/'
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_auto_complete/'
 learning_rate = 0.001
 batch_size = 100
 caption_weight = 1.
@@ -55,6 +55,10 @@ class Video_Caption_Generator():
         self.lstm4_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm4,output_keep_prob=1 - self.drop_out_rate)
 
         self.vae = VAE(self.dim_hidden * 2, self.dim_hidden)
+
+        self.vs_W = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden], -0.1, 0.1), name='vh_W')
+        self.s_bias = tf.Variable(tf.zeros([dim_hidden]), name='s_bias')
+        self.v_bias = tf.Variable(tf.zeros([dim_hidden]), name='v_bias')
 
         self.encode_image_W = tf.Variable(tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1),name='encode_image_W')
         self.encode_image_b = tf.Variable(tf.zeros([dim_hidden]), name='encode_image_b')
@@ -96,7 +100,11 @@ class Video_Caption_Generator():
         ######## Encoding Stage #########
 
         ######## tied loss #########
-        loss_tied = tf.reduce_sum(tf.square(tf.subtract(output1, output2))) / self.batch_size
+        vh_pred = tf.nn.tanh(tf.nn.xw_plus_b(output2, self.vs_W, self.v_bias))
+        loss_tied_1 = tf.reduce_sum(tf.square(tf.subtract(output1, vh_pred))) / self.batch_size
+        sh_pred - tf.nn.tanh(tf.nn.xw_plus_b(output1, self.vs_W, self.s_bias))
+        loss_tied_2 = tf.reduce_sum(tf.square(tf.subtract(output2, sh_pred))) / self.batch_size
+        loss_tied = loss_tied_1 + loss_tied_2
 
         ######## Semantic Learning Stage ########
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
@@ -167,7 +175,7 @@ class Video_Caption_Generator():
         ####### Encoding Video ##########
 
         ####### Semantic Mapping ########
-        output2 = output1
+        output2 = tf.nn.tanh(tf.nn.xw_plus_b(output1, self.vs_W, self.s_bias))
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
         ####### Semantic Mapping ########
@@ -215,7 +223,7 @@ class Video_Caption_Generator():
         ######## Encoding Stage #########
 
         ####### Semantic Mapping ########
-        output1 = output2
+        output1 = tf.nn.tanh(tf.nn.xw_plus_b(output2, self.vs_W, self.v_bias))
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
         ####### Semantic Mapping ########
@@ -261,7 +269,7 @@ class Video_Caption_Generator():
         ####### Encoding Sentence ##########
 
         ####### Semantic Mapping ########
-        output1 = output2
+        output1 = tf.nn.tanh(tf.nn.xw_plus_b(output2, self.vs_W, self.v_bias)
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.vae(input_state)
         ####### Semantic Mapping ########
@@ -299,7 +307,7 @@ class Video_Caption_Generator():
         ######## Encoding Stage #########
 
         ####### Semantic Mapping ########
-        output2 = output1
+        output2 = tf.nn.tanh(tf.nn.xw_plus_b(output1, self.vs_W, self.s_bias))
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.vae(input_state)
         ####### Semantic Mapping ########
@@ -335,7 +343,7 @@ def train():
     assert os.path.isfile(video_data_path_val)
     assert os.path.isdir(model_path)
     print 'load meta data...'
-    wordtoix = np.load(home_folder + 'data0/msvd_wordtoix.npy').tolist()
+    wordtoix = np.load(home_folder + 'data0/msrvtt_wordtoix.npy').tolist()
     print 'build model and session...'
     # shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -406,8 +414,6 @@ def train():
     # initialize epoch variable in queue reader
     sess.run(tf.local_variables_initializer())
     loss_epoch = 0
-    loss_epoch_cap = 0
-    loss_epoch_vid = 0
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     ##### add summaries ######
@@ -435,20 +441,17 @@ def train():
         print "Time Cost:", round(tStop - tStart, 2), "s"
         loss_epoch += loss_val
 
-        if step % n_epoch_steps == 0:
+#        if step % n_epoch_steps == 0:
+        if True:
             epoch += 1
             loss_epoch /= n_epoch_steps
-            loss_epoch_vid /= n_epoch_steps
-            loss_epoch_cap /= n_epoch_steps
             with tf.device(cpu_device):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
 #            print 'z:', z[0, :10]
-            print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_epoch_cap, "loss_vid:", loss_epoch_vid
+            print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_cap, "loss_lat:",loss_lat, "loss_vid:", loss_vid
             loss_epoch = 0
-            loss_epoch_vid = 0
-            loss_epoch_cap = 0
             ######### test sentence generation ##########
-            ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
+            ixtoword = pd.Series(np.load(home_folder + 'data0/msrvtt_ixtoword.npy').tolist())
 #            n_val_steps = int(n_val_samples / batch_size)
             n_val_steps = 3
             ### TODO: sometimes COCO test show exceptions in the beginning of training ####
@@ -508,7 +511,7 @@ def train():
 def test(model_path='models/model-900', video_feat_path=video_feat_path):
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
 #    test_data = val_data   # to evaluate on testing data or validation data
-    ixtoword = pd.Series(np.load('./data0/msvd_ixtoword.npy').tolist())
+    ixtoword = pd.Series(np.load('./data0/msrvtt_ixtoword.npy').tolist())
 
     model = Video_Caption_Generator(
             dim_image=dim_image,

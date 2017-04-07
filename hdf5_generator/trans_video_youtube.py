@@ -12,7 +12,8 @@ sys.path.insert(0, os.path.abspath('../'))
 from utils.record_helper import write_data_as_record
 import tensorflow as tf
 
-feature_folder = '/disk_2T/shenxu/msrvtt_feat_vgg_c3d_batch/'
+#feature_folder = '/disk_2T/shenxu/msrvtt_feat_vgg_c3d_batch/'
+feature_folder = '/home/shenxu/data/test_data/'
 vgg_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_train/'
 vgg_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_val/'
 c3d_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_train/'
@@ -88,6 +89,7 @@ def trans_video_youtube_record(datasplit_list, datasplit, vgg_feat_name,
     writer = tf.python_io.TFRecordWriter(filename)
     for ele in datasplit_list:
         vgg_feat_file = vgg_feat_folder + ele + '.h5'
+        print vgg_feat_file
         c3d_feat_file = c3d_feat_folder + ele + '_c3d_' + c3d_feat_name + '-1.h5'
         assert os.path.isfile(vgg_feat_file)
         assert os.path.isfile(c3d_feat_file)
@@ -145,7 +147,7 @@ def trans_video_youtube_record(datasplit_list, datasplit, vgg_feat_name,
     writer.close()
 
 def trans_video_msrvtt_record(datasplit_list, datasplit, vgg_feat_name, c3d_feat_name, wordtoix):
-    assert datasplit in ['train', 'val']
+#    assert datasplit in ['train', 'val', 'test']
     assert len(datasplit_list) > 0
     re = json.load(open('msrvtt2sent.json'))
     n_length = 45
@@ -160,9 +162,13 @@ def trans_video_msrvtt_record(datasplit_list, datasplit, vgg_feat_name, c3d_feat
         if datasplit == 'train':
             vgg_feat_file = vgg_feat_folder_train + ele
             c3d_feat_file = c3d_feat_folder_train + ele
-        else:
+        elif datasplit == 'val':
             vgg_feat_file = vgg_feat_folder_val + ele
             c3d_feat_file = c3d_feat_folder_val + ele
+        else:
+            vgg_feat_file = vgg_feat_folder_test + ele
+            c3d_feat_file = c3d_feat_folder_test + ele
+
         assert os.path.isfile(vgg_feat_file)
         assert os.path.isfile(c3d_feat_file)
         vgg_feat = np.squeeze(np.asarray(h5py.File(vgg_feat_file)[vgg_feat_name]))
@@ -382,8 +388,8 @@ def getlist(feature_folder_name, split):
 if __name__ == '__main__':
     dataset = np.load('msrvtt_dataset.npz')
     wordtoix, _ = build_vocab(dataset['train'])
-    trans_video_msrvtt_record(dataset['train'], 'train', vgg_feat_name, c3d_feat_name, wordtoix)
-    trans_video_msrvtt_record(dataset['val'], 'val', vgg_feat_name, c3d_feat_name, wordtoix)
+    trans_video_msrvtt_record(dataset['train'][:5], 'train', vgg_feat_name, c3d_feat_name, wordtoix)
+#    trans_video_msrvtt_record(dataset['val'], 'val', vgg_feat_name, c3d_feat_name, wordtoix)
 #    trans_video_youtube_record(dataset['test'], 'test', vgg_feat_name, c3d_feat_name, wordtoix)
 #    getlist(feature_folder,'train')
 #    getlist(feature_folder,'val')

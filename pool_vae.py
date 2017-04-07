@@ -17,14 +17,18 @@ from utils.record_helper import read_and_decode
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_random/'
-learning_rate = 0.0001
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_keep/'
+learning_rate = 0.001
 batch_size = 100
-drop_strategy = 'random'
+drop_strategy = 'keep'
 caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01
 cpu_device = "/cpu:0"
+test_v2s = True
+test_v2v = True
+test_s2s = True
+test_s2v = True
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -413,6 +417,8 @@ def train():
     # initialize epoch variable in queue reader
     sess.run(tf.local_variables_initializer())
     loss_epoch = 0
+    loss_epoch_cap = 0
+    loss_epoch_vid = 0
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     ##### add summaries ######
@@ -447,15 +453,21 @@ def train():
         print "step:", step, " Loss:", loss_val, "loss_cap:", loss_cap*caption_weight, "loss_latent:", loss_lat*latent_weight, "loss_vid:", loss_vid * video_weight
         print "Time Cost:", round(tStop - tStart, 2), "s"
         loss_epoch += loss_val
+        loss_epoch_cap += loss_cap
+        loss_epoch_vid += loss_vid
 
         if step % n_epoch_steps == 0:
             epoch += 1
             loss_epoch /= n_epoch_steps
+            loss_epoch_cap /= n_epoch_steps
+            loss_epoch_vid /= n_epoch_steps
             with tf.device(cpu_device):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
 #            print 'z:', z[0, :10]
-            print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_cap, "loss_lat:",loss_lat, "loss_vid:", loss_vid
+            print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_epoch_cap, "loss_lat:",loss_lat, "loss_vid:", loss_epoch_vid
             loss_epoch = 0
+            loss_epoch_cap = 0
+            loss_epoch_vid = 0
             ######### test sentence generation ##########
             ixtoword = pd.Series(np.load(home_folder + 'data0/ixtoword.npy').tolist())
             n_val_steps = int(n_val_samples / batch_size)

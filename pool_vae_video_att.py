@@ -17,14 +17,15 @@ from utils.record_helper import read_and_decode
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_random/'
-learning_rate = 0.0001
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_video_att/'
+learning_rate = 0.001
 batch_size = 100
-drop_strategy = 'random'
+# 'block_video', 'block_sent', 'random', 'keep'
+drop_strategy = 'keep'
 caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01
-cpu_device = "/cpu:0"
+cpu_device = "/cpu:2"
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -144,7 +145,7 @@ class Video_Caption_Generator():
             ## TODO: add attention for video decoding
             ## write into memory first
             with tf.variable_scope("LSTM4"):
-                _, state4 = self.lstm4_dropout(output_semantic, state4)
+                _, state4 = self.lstm4_dropout(tf.concat([output_semantic, output_semantic], 1), state4)
             for i in xrange(self.n_video_steps):
                 scope.reuse_variables()
                 with tf.variable_scope("LSTM4"):
@@ -281,7 +282,7 @@ class Video_Caption_Generator():
         with tf.variable_scope("model") as scope:
             scope.reuse_variables()
             with tf.variable_scope("LSTM4"):
-                _, state4 = self.lstm4(output_semantic, state4)
+                _, state4 = self.lstm4(tf.concat([output_semantic, output_semantic], 1), state4)
             for i in range(self.n_video_steps):
                 with tf.variable_scope("LSTM4") as vs:
                     output4, state4 = self.lstm4(tf.concat([output2, image_emb], 1), state4) # b x h
@@ -321,10 +322,10 @@ class Video_Caption_Generator():
         with tf.variable_scope("model") as scope:
             scope.reuse_variables()
             with tf.variable_scope("LSTM4"):
-                _, state4 = self.lstm4(output_semantic, state4)
+                _, state4 = self.lstm4(tf.concat([output_semantic, output_semantic], 1), state4)
             for i in range(self.n_video_steps):
                 with tf.variable_scope("LSTM4") as vs:
-                    output4, state4 = self.lstm4(image_emb, state4) # b x h
+                    output4, state4 = self.lstm4(tf.concat([output2, image_emb], 1), state4) # b x h
                     lstm4_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
 
                 image_prev = tf.nn.xw_plus_b(output4, self.decode_image_W, self.decode_image_b)
@@ -413,6 +414,8 @@ def train():
     # initialize epoch variable in queue reader
     sess.run(tf.local_variables_initializer())
     loss_epoch = 0
+    loss_epoch_cap = 0
+    loss_epoch_vid = 0
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     ##### add summaries ######
@@ -447,15 +450,21 @@ def train():
         print "step:", step, " Loss:", loss_val, "loss_cap:", loss_cap*caption_weight, "loss_latent:", loss_lat*latent_weight, "loss_vid:", loss_vid * video_weight
         print "Time Cost:", round(tStop - tStart, 2), "s"
         loss_epoch += loss_val
+        loss_epoch_cap += loss_cap
+        loss_epoch_vid += loss_vid
 
         if step % n_epoch_steps == 0:
             epoch += 1
             loss_epoch /= n_epoch_steps
+            loss_epoch_vid /= n_epoch_steps
+            loss_epoch_cap /= n_epoch_steps
             with tf.device(cpu_device):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
 #            print 'z:', z[0, :10]
-            print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_cap, "loss_lat:",loss_lat, "loss_vid:", loss_vid
+            print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_epoch_cap, "loss_vid:", loss_epoch_vid
             loss_epoch = 0
+            loss_epoch_cap = 0
+            loss_epoch_vid = 0
             ######### test sentence generation ##########
             ixtoword = pd.Series(np.load(home_folder + 'data0/ixtoword.npy').tolist())
             n_val_steps = int(n_val_samples / batch_size)
