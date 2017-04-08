@@ -345,7 +345,7 @@ def train():
     assert os.path.isdir(model_path)
     assert drop_strategy in ['block_video', 'block_sent', 'random', 'keep']
     print 'load meta data...'
-    wordtoix = np.load(home_folder + 'data0/wordtoix.npy').tolist()
+    wordtoix = np.load(home_folder + 'data0/msvd_wordtoix.npy').tolist()
     print 'build model and session...'
     # shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -468,7 +468,7 @@ def train():
             loss_epoch_cap = 0
             loss_epoch_vid = 0
             ######### test sentence generation ##########
-            ixtoword = pd.Series(np.load(home_folder + 'data0/ixtoword.npy').tolist())
+            ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
             n_val_steps = int(n_val_samples / batch_size)
             ### TODO: sometimes COCO test show exceptions in the beginning of training ####
             if test_v2s:

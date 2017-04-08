@@ -144,6 +144,7 @@ def train():
     assert os.path.isdir(model_path)
     print 'load meta data...'
     wordtoix = np.load(home_folder + 'data0/msvd_wordtoix.npy').tolist()
+    ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
     print 'build model and session...'
     # shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -176,6 +177,7 @@ def train():
     with tf.device("/gpu:0"):
         tf_loss = model.build_model(train_caption_id, train_caption_id_1, train_caption_label)
         val_caption_tf, val_lstm3_variables_tf = model.build_sent_generator(val_caption_id_1)
+
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
     # check for model file
     with tf.device(cpu_device):
@@ -230,19 +232,16 @@ def train():
             loss_epoch = 0
             n_val_steps = int(n_val_samples / batch_size)
             ######### test sentence generation ##########
-            try:
-                ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_caption_tf, val_fname)
-                for key in pred_dict.keys():
-                    for ele in gt_dict[key]:
-                        print "GT:  " + ele['caption']
-                    print "PD:  " + pred_dict[key][0]['caption']
-                    print '-------'
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_caption_tf, val_fname)
-                scorer = COCOScorer()
-                total_score = scorer.score(gt_dict, pred_dict, id_list)
-            except Exception, e:
-                print 'epoch', epoch, 's2s bleu exception'
+#                ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_caption_tf, val_fname)
+            for key in pred_dict.keys():
+                for ele in gt_dict[key]:
+                    print "GT:  " + ele['caption']
+                print "PD:  " + pred_dict[key][0]['caption']
+                print '-------'
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_caption_tf, val_fname)
+            scorer = COCOScorer()
+            total_score = scorer.score(gt_dict, pred_dict, id_list)
 
             #### summary #####
             summary = sess.run(loss_summary)

@@ -14,19 +14,20 @@ from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoi
 from modules.variational_autoencoder import VAE
 from utils.model_ops import *
 from utils.record_helper import read_and_decode
+import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_auto_complete/'
+model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_auto_comp/'
 learning_rate = 0.001
-batch_size = 100
 caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01
 tied_weight = 1.
-cpu_device = "/cpu:1"
-video_data_path_train = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/train.tfrecords'
-video_data_path_val = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/val.tfrecords'
-video_data_path_test = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/test.tfrecords'
+cpu_device = "/cpu:0"
+test_v2s = True
+test_v2v = True
+test_s2s = True
+test_s2v = True
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -56,9 +57,9 @@ class Video_Caption_Generator():
 
         self.vae = VAE(self.dim_hidden * 2, self.dim_hidden)
 
-        self.vs_W = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden], -0.1, 0.1), name='vh_W')
-        self.s_bias = tf.Variable(tf.zeros([dim_hidden]), name='s_bias')
-        self.v_bias = tf.Variable(tf.zeros([dim_hidden]), name='v_bias')
+        self.sv_W = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden], -0.1, 0.1), name='sv_W')
+        self.s_b = tf.Variable(tf.zeros([dim_hidden]), name='s_b')
+        self.v_b = tf.Variable(tf.zeros([dim_hidden]), name='v_b')
 
         self.encode_image_W = tf.Variable(tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1),name='encode_image_W')
         self.encode_image_b = tf.Variable(tf.zeros([dim_hidden]), name='encode_image_b')
@@ -85,10 +86,8 @@ class Video_Caption_Generator():
 
         ######## Encoding Stage #########
         # encoding video
-        # mean pooling
-        embed_video = tf.reduce_mean(video, axis=1) # b x d_im
-        # embedding into (-1, 1) range
-        output1 = tf.nn.tanh(tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b)) # b x h
+        # mean pooling && mapping into (-1, 1) range
+        output1 = tf.nn.tanh(tf.reduce_mean(image_emb, axis=1)) # b x h
         # encoding sentence
         with tf.variable_scope("model") as scope:
             for i in xrange(self.n_caption_steps):
@@ -99,17 +98,23 @@ class Video_Caption_Generator():
                     output2, state2 = self.lstm2_dropout(current_embed, state2) # b x h
         ######## Encoding Stage #########
 
-        ######## tied loss #########
-        vh_pred = tf.nn.tanh(tf.nn.xw_plus_b(output2, self.vs_W, self.v_bias))
-        loss_tied_1 = tf.reduce_sum(tf.square(tf.subtract(output1, vh_pred))) / self.batch_size
-        sh_pred = tf.nn.tanh(tf.nn.xw_plus_b(output1, self.vs_W, self.s_bias))
-        loss_tied_2 = tf.reduce_sum(tf.square(tf.subtract(output2, sh_pred))) / self.batch_size
-        loss_tied = loss_tied_1 + loss_tied_2
 
         ######## Semantic Learning Stage ########
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         loss_latent, output_semantic = self.vae(input_state)
         ######## Semantic Learning Stage ########
+
+        ####### tied loss ##########
+        sh_pred = tf.tanh(tf.nn.xw_plus_b(output1, self.sv_W, self.s_b)) # b x h
+        loss_tied_1 = tf.reduce_sum(tf.square(tf.subtract(output2, sh_pred)))
+        vh_pred = tf.tanh(tf.nn.xw_plus_b(output2, self.sv_W, self.v_b)) # b x h
+        loss_tied_2 = tf.reduce_sum(tf.square(tf.subtract(output1, vh_pred)))
+        loss_tied = loss_tied_1 + loss_tied_2
+        tf.summary.scalar('loss_tied_1', loss_tied_1)
+        tf.summary.scalar('loss_tied_2', loss_tied_2)
+        tf.summary.histogram('vh_pred', vh_pred)
+        tf.summary.histogram('sh_pred', sh_pred)
+        ####### tied loss ##########
 
         ######## Decoding Stage ##########
         state3 = (c_init, m_init) # 2 x b x h
@@ -163,7 +168,7 @@ class Video_Caption_Generator():
 
         loss = tf.constant(caption_weight) * loss_caption + tf.constant(video_weight) * loss_video + \
             tf.constant(latent_weight) * loss_latent + tf.constant(tied_weight) * loss_tied
-        return loss, loss_caption, loss_latent, loss_video, loss_tied, output_semantic, output1, output2
+        return loss, loss_caption, loss_tied, loss_latent, loss_video, output_semantic, output1, output2
 
 
     def build_v2s_generator(self, video):
@@ -175,7 +180,7 @@ class Video_Caption_Generator():
         ####### Encoding Video ##########
 
         ####### Semantic Mapping ########
-        output2 = tf.nn.tanh(tf.nn.xw_plus_b(output1, self.vs_W, self.s_bias))
+        output2 = tf.tanh(tf.nn.xw_plus_b(output1, self.sv_W, self.s_b))
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
         ####### Semantic Mapping ########
@@ -223,7 +228,7 @@ class Video_Caption_Generator():
         ######## Encoding Stage #########
 
         ####### Semantic Mapping ########
-        output1 = tf.nn.tanh(tf.nn.xw_plus_b(output2, self.vs_W, self.v_bias))
+        output1 = tf.tanh(tf.nn.xw_plus_b(output2, self.sv_W, self.v_b))
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
         ####### Semantic Mapping ########
@@ -269,7 +274,7 @@ class Video_Caption_Generator():
         ####### Encoding Sentence ##########
 
         ####### Semantic Mapping ########
-        output1 = tf.nn.tanh(tf.nn.xw_plus_b(output2, self.vs_W, self.v_bias)
+        output1 = tf.tanh(tf.nn.xw_plus_b(output2, self.sv_W, self.v_b))
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.vae(input_state)
         ####### Semantic Mapping ########
@@ -307,7 +312,7 @@ class Video_Caption_Generator():
         ######## Encoding Stage #########
 
         ####### Semantic Mapping ########
-        output2 = tf.nn.tanh(tf.nn.xw_plus_b(output1, self.vs_W, self.s_bias))
+        output2 = tf.nn.tanh(tf.nn.xw_plus_b(output1, self.sv_W, self.s_b))
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.vae(input_state)
         ####### Semantic Mapping ########
@@ -342,8 +347,8 @@ def train():
     assert os.path.isfile(video_data_path_train)
     assert os.path.isfile(video_data_path_val)
     assert os.path.isdir(model_path)
-    print 'load meta data...'
-    wordtoix = np.load(home_folder + 'data0/msrvtt_wordtoix.npy').tolist()
+    wordtoix = np.load(home_folder + 'data0/msvd_wordtoix.npy').tolist()
+    ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
     print 'build model and session...'
     # shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -365,7 +370,7 @@ def train():
             _, _, _, _ = read_and_decode(video_data_path_train)
         val_data, val_encode_data, val_fname, val_title, val_video_label, val_caption_label, val_caption_id, val_caption_id_1, \
             _, _, _, _ = read_and_decode(video_data_path_val)
-        # random batches
+       # random batches
         train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1 = \
             tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1],
                 batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
@@ -374,8 +379,8 @@ def train():
                 batch_size=batch_size, num_threads=1, capacity=2* batch_size)
     # graph on the GPU
     with tf.device("/gpu:0"):
-        tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_loss_tied, tf_z, tf_v_h, tf_s_h \
-            = model.build_model(train_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
+        tf_loss, tf_loss_cap, tf_loss_tied, tf_loss_lat, tf_loss_vid, tf_z, tf_vh, tf_sh = \
+            model.build_model(train_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
         val_v2s_tf,_ = model.build_v2s_generator(val_data)
         val_s2s_tf,_ = model.build_s2s_generator(val_caption_id_1)
         val_s2v_tf,_ = model.build_s2v_generator(val_caption_id_1)
@@ -397,19 +402,27 @@ def train():
         print("Created model with fresh parameters.")
         sess.run(tf.global_variables_initializer())
     temp = set(tf.global_variables())
+
     # train on the GPU
     with tf.device("/gpu:0"):
-#        train_op = tf.train.AdamOptimizer(learning_rate).minimize(tf_loss)
-        ## initialize variables added for optimizer
+        ## 1. weight decay
+        for var in tf.trainable_variables():
+            decay_loss = tf.multiply(tf.nn.l2_loss(var), 0.0004, name='weight_loss')
+            tf.add_to_collection('losses', decay_loss)
+        tf.add_to_collection('losses', tf_loss)
+        tf_total_loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
+        ## 2. gradient clip
         optimizer = tf.train.AdamOptimizer(learning_rate)
-        gvs = optimizer.compute_gradients(tf_loss)
+        gvs = optimizer.compute_gradients(tf_total_loss)
         # when variable is not related to the loss, grad returned as None
         clip_gvs = [(tf.clip_by_norm(grad, clip_norm), var) for grad, var in gvs if grad is not None]
         for grad, var in gvs:
-            if 'LSTM4' in var.name and grad is not None:
+            if grad is not None:
                 tf.summary.histogram(var.name + '/grad', grad)
-        train_op = optimizer.apply_gradients(gvs)
+                tf.summary.histogram(var.name + '/data', var)
+        train_op = optimizer.apply_gradients(clip_gvs)
 
+    ## initialize variables added for optimizer
     sess.run(tf.variables_initializer(set(tf.global_variables()) - temp))
     # initialize epoch variable in queue reader
     sess.run(tf.local_variables_initializer())
@@ -417,12 +430,13 @@ def train():
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     ##### add summaries ######
-    tf.summary.histogram('video_h', tf_v_h)
-    tf.summary.histogram('sent_h', tf_s_h)
+    tf.summary.histogram('video_h', tf_vh)
+    tf.summary.histogram('sent_h', tf_sh)
+    tf.summary.histogram('z', tf_z)
     tf.summary.scalar('loss_vid', tf_loss_vid)
     tf.summary.scalar('loss_lat', tf_loss_lat)
-    tf.summary.scalar('loss_tied', tf_loss_tied)
     tf.summary.scalar('loss_caption', tf_loss_cap)
+    tf.summary.scalar('loss_tied', tf_loss_tied)
 #    for var in tf.trainable_variables():
 #        summaries.append(tf.histogram_summary(var.op.name, var))
     summary_op = tf.summary.merge_all()
@@ -433,69 +447,68 @@ def train():
     for step in xrange(1, n_steps+1):
         tStart = time.time()
 
-        _, loss_val, loss_cap, loss_lat, loss_vid, loss_tied = sess.run(
-                [train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_loss_tied])
+        _, loss_val, loss_cap, loss_lat, loss_vid = sess.run(
+                [train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid])
         tStop = time.time()
-        print "step:", step, " Loss:", loss_val, "loss_cap:", loss_cap*caption_weight, "loss_latent:", \
-            loss_lat*latent_weight, "loss_vid:", loss_vid * video_weight, "loss_tied:", loss_tied * tied_weight
+        print "step:", step, " Loss:", loss_val, "loss_cap:", loss_cap*caption_weight, "loss_latent:", loss_lat*latent_weight, "loss_vid:", loss_vid * video_weight
         print "Time Cost:", round(tStop - tStart, 2), "s"
         loss_epoch += loss_val
 
-#        if step % n_epoch_steps == 0:
-        if True:
+        if step % n_epoch_steps == 0:
             epoch += 1
             loss_epoch /= n_epoch_steps
             with tf.device(cpu_device):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
 #            print 'z:', z[0, :10]
-            print 'epoch:', epoch, 'loss:', loss_epoch, "loss_cap:", loss_cap, "loss_lat:",loss_lat, "loss_vid:", loss_vid
-            loss_epoch = 0
+            print 'epoch:', epoch, 'loss:', loss_epoch
             ######### test sentence generation ##########
-            ixtoword = pd.Series(np.load(home_folder + 'data0/msrvtt_ixtoword.npy').tolist())
-#            n_val_steps = int(n_val_samples / batch_size)
-            n_val_steps = 3
+            ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
+            n_val_steps = int(n_val_samples / batch_size)
             ### TODO: sometimes COCO test show exceptions in the beginning of training ####
-            try:
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
-                for key in pred_dict.keys():
-                    for ele in gt_dict[key]:
-                        print "GT:  " + ele['caption']
-                    print "PD:  " + pred_dict[key][0]['caption']
-                    print '-------'
-                print '############## video to sentence result #################'
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_v2s_tf, val_fname)
-                scorer = COCOScorer()
-                total_score = scorer.score(gt_dict, pred_dict, id_list)
-                print '############## video to sentence result #################'
-            except Exception, e:
-                print 'epoch:', epoch, 'v2s Bleu test exception'
+            if test_v2s:
+                try:
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
+                    for key in pred_dict.keys():
+                        for ele in gt_dict[key]:
+                            print "GT:  " + ele['caption']
+                        print "PD:  " + pred_dict[key][0]['caption']
+                        print '-------'
+                    print '############## video to sentence result #################'
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_v2s_tf, val_fname)
+                    scorer = COCOScorer()
+                    total_score = scorer.score(gt_dict, pred_dict, id_list)
+                    print '############## video to sentence result #################'
+                except Exception, e:
+                    print 'epoch:', epoch, 'v2s Bleu test exception'
 
-            try:
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
-                for key in pred_dict.keys():
-                    for ele in gt_dict[key]:
-                        print "GT:  " + ele['caption']
-                    print "PD:  " + pred_dict[key][0]['caption']
-                    print '-------'
-                print '############## sentence to sentence result #################'
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_s2s_tf, val_fname)
-                scorer = COCOScorer()
-                total_score = scorer.score(gt_dict, pred_dict, id_list)
-                print '############## sentence to sentence result #################'
-            except Exception, e:
-                print 'epoch', epoch, 's2s Bleu test exception'
+            if test_s2s:
+                try:
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
+                    for key in pred_dict.keys():
+                        for ele in gt_dict[key]:
+                            print "GT:  " + ele['caption']
+                        print "PD:  " + pred_dict[key][0]['caption']
+                        print '-------'
+                    print '############## sentence to sentence result #################'
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_s2s_tf, val_fname)
+                    scorer = COCOScorer()
+                    total_score = scorer.score(gt_dict, pred_dict, id_list)
+                    print '############## sentence to sentence result #################'
+                except Exception, e:
+                    print 'epoch', epoch, 's2s Bleu test exception'
 
             ######### test video generation #############
-            mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf)
-            print 'epoch', epoch, 'video2video mse:', mse_v2v
-            mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf)
-            print 'epoch', epoch, 'caption2video mse:', mse_s2v
+            if test_v2v:
+                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf)
+                print 'epoch', epoch, 'video2video mse:', mse_v2v
+            if test_s2v:
+                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf)
+                print 'epoch', epoch, 'caption2video mse:', mse_s2v
             sys.stdout.flush()
 
             ###### summary ######
-            if epoch % 2 == 0:
-                summary  = sess.run(summary_op)
-                summary_writer.add_summary(summary, epoch)
+            summary  = sess.run(summary_op)
+            summary_writer.add_summary(summary, epoch)
 
         sys.stdout.flush()
 
@@ -511,7 +524,7 @@ def train():
 def test(model_path='models/model-900', video_feat_path=video_feat_path):
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
 #    test_data = val_data   # to evaluate on testing data or validation data
-    ixtoword = pd.Series(np.load('./data0/msrvtt_ixtoword.npy').tolist())
+    ixtoword = pd.Series(np.load('./data0/msvd_ixtoword.npy').tolist())
 
     model = Video_Caption_Generator(
             dim_image=dim_image,

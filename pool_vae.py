@@ -83,10 +83,8 @@ class Video_Caption_Generator():
 
         ######## Encoding Stage #########
         # encoding video
-        # mean pooling
-        embed_video = tf.reduce_mean(video, axis=1) # b x d_im
-        # embedding into (-1, 1) range
-        output1 = tf.nn.tanh(tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b)) # b x h
+        # mean pooling && mapping into (-1, 1) range
+        output1 = tf.nn.tanh(tf.reduce_mean(image_emb, axis=1)) # b x h
         # encoding sentence
         with tf.variable_scope("model") as scope:
             for i in xrange(self.n_caption_steps):
@@ -344,8 +342,8 @@ def train():
     assert os.path.isfile(video_data_path_val)
     assert os.path.isdir(model_path)
     assert drop_strategy in ['block_video', 'block_sent', 'random', 'keep']
-    print 'load meta data...'
-    wordtoix = np.load(home_folder + 'data0/wordtoix.npy').tolist()
+    wordtoix = np.load(home_folder + 'data0/msvd_wordtoix.npy').tolist()
+    ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
     print 'build model and session...'
     # shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -367,7 +365,7 @@ def train():
             _, _, _, _ = read_and_decode(video_data_path_train)
         val_data, val_encode_data, val_fname, val_title, val_video_label, val_caption_label, val_caption_id, val_caption_id_1, \
             _, _, _, _ = read_and_decode(video_data_path_val)
-        # random batches
+       # random batches
         train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1 = \
             tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1],
                 batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
@@ -408,8 +406,9 @@ def train():
         # when variable is not related to the loss, grad returned as None
         clip_gvs = [(tf.clip_by_norm(grad, clip_norm), var) for grad, var in gvs if grad is not None]
         for grad, var in gvs:
-            if 'LSTM4' in var.name and grad is not None:
+            if grad is not None:
                 tf.summary.histogram(var.name + '/grad', grad)
+                tf.summary.histogram(var.name + '/data', var)
         train_op = optimizer.apply_gradients(gvs)
 
     sess.run(tf.variables_initializer(set(tf.global_variables()) - temp))
@@ -425,6 +424,7 @@ def train():
     tf.summary.histogram('sent_h', tf_s_h)
     tf.summary.scalar('loss_vid', tf_loss_vid)
     tf.summary.scalar('loss_lat', tf_loss_lat)
+    tf.summary.scalar('loss_caption', tf_loss_cap)
 #    for var in tf.trainable_variables():
 #        summaries.append(tf.histogram_summary(var.op.name, var))
     summary_op = tf.summary.merge_all()
@@ -531,7 +531,7 @@ def train():
 def test(model_path='models/model-900', video_feat_path=video_feat_path):
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
 #    test_data = val_data   # to evaluate on testing data or validation data
-    ixtoword = pd.Series(np.load('./data0/ixtoword.npy').tolist())
+    ixtoword = pd.Series(np.load('./data0/msvd_ixtoword.npy').tolist())
 
     model = Video_Caption_Generator(
             dim_image=dim_image,
