@@ -3,11 +3,6 @@ This is a fork of the soft attention tensorflow implementation from [SA-tensorfl
 
 I slightly refined the code in Att.py for the new r1.0 tensorflow version. 
 
-<center>
-<img src="./README_files/head.png">
-An example of soft-attention mechanism. The attention weight alpha indicates the temporal attention in one video based on each word.  
-</center>
-
 # Prerequisites
 * Python 2.7
 * [Tensorflow](https://www.tensorflow.org/) >= 1.0
