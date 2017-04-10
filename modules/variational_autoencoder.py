@@ -13,11 +13,11 @@ class VAE(object):
 	"""
 
 	def __init__(self, n_in, n_out, sigma_clip=10.):
-		self.mu_W = tf.Variable(tf.random_normal([n_in, n_out], mean=0., stddev=0.001), name = 'vae/mu_W')
+		self.mu_W = tf.Variable(xavier_init(n_in, n_out), name = 'vae/mu_W')
 		self.mu_bias = tf.Variable(tf.zeros([n_out]), name = 'vae/mu_bias')
-		self.sigma_W = tf.Variable(tf.random_normal([n_in, n_out], mean=0., stddev=0.001), name = 'vae/sigma_W')
+		self.sigma_W = tf.Variable(xavier_init(n_in, n_out), name = 'vae/sigma_W')
 		self.sigma_bias = tf.Variable(tf.zeros([n_out]), name = 'vae/sigma_bias')
-		self.sigma_clip= sigma_clip
+		self.sigma_clip = sigma_clip
 
 	def __call__(self, x):
 		z_mean = tf.nn.xw_plus_b(x, self.mu_W, self.mu_bias) # b x n_out

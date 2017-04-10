@@ -23,16 +23,19 @@ drop_strategy = 'random'
 caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01
-cpu_device = "/cpu:0"
+cpu_device = "/cpu:1"
 test_v2s = True
 test_v2v = True
 test_s2s = True
 test_s2v = True
+video_data_path_train = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/train.tfrecords'
+video_data_path_val = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/val.tfrecords'
+video_data_path_test = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/test.tfrecords'
 #### custom parameters #####
 
 class Video_Caption_Generator():
     def __init__(self, dim_image, n_words, dim_hidden, batch_size, n_caption_steps,
-        n_video_steps, drop_out_rate, bias_init_vector=None):
+        n_video_steps, drop_out_rate, bias_init_vector=None, global_max_feat=None):
         self.dim_image = dim_image
         self.n_words = n_words
         self.dim_hidden = dim_hidden
@@ -59,8 +62,8 @@ class Video_Caption_Generator():
 
         self.encode_image_W = tf.Variable(tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1),name='encode_image_W')
         self.encode_image_b = tf.Variable(tf.zeros([dim_hidden]), name='encode_image_b')
-        self.decode_image_W = tf.Variable(tf.random_uniform([dim_hidden, dim_image], -0.1, 0.1, name='decode_image_W'))
-        self.decode_image_b = tf.Variable(tf.random_uniform([dim_image]), name='decode_image_b')
+        self.decode_image_W = tf.Variable(tf.random_uniform([dim_hidden, dim_image], -0.1, 0.1), name='decode_image_W')
+        self.decode_image_b = tf.Variable(tf.zeros([dim_image]), name='decode_image_b')
 
         self.embed_word_W = tf.Variable(tf.random_uniform([dim_hidden, n_words], -0.1,0.1), name='embed_word_W')
         if bias_init_vector is not None:
@@ -68,7 +71,13 @@ class Video_Caption_Generator():
         else:
             self.embed_word_b = tf.Variable(tf.zeros([n_words]), name='embed_word_b')
 
+        if global_max_feat is not None:
+            self.global_max_feat = tf.Variable(global_max_feat.astype(np.float32), name='global_max_feat')
+        else:
+            self.global_max_feat = tf.Variable(tf.ones([dim_image]), name='global_max_feat')
+
     def build_model(self, video, video_mask, caption, caption_1, caption_mask):
+        video = tf.divide(video, self.global_max_feat)
         drop_type = tf.placeholder(tf.int32, shape=[])
         caption_mask = tf.cast(caption_mask, tf.float32)
         video_mask = tf.cast(video_mask, tf.float32)
@@ -166,6 +175,7 @@ class Video_Caption_Generator():
 
 
     def build_v2s_generator(self, video):
+        video = tf.divide(video, self.global_max_feat)
         ####### Encoding Video ##########
         # encoding video
         embed_video = tf.reduce_mean(video, axis=1) # b x d_im
@@ -297,6 +307,7 @@ class Video_Caption_Generator():
         return generated_images, lstm4_variables
 
     def build_v2v_generator(self, video):
+        video = tf.divide(video, self.global_max_feat)
         ######## Encoding Stage #########
         # encoding video
         # mean pooling
@@ -337,13 +348,16 @@ class Video_Caption_Generator():
         return generated_images, lstm4_variables
 
 def train():
-    assert os.path.isdir(home_folder)
     assert os.path.isfile(video_data_path_train)
     assert os.path.isfile(video_data_path_val)
     assert os.path.isdir(model_path)
+    assert os.path.isfile(wordtoix_file)
+    assert os.path.isfile(ixtoword_file)
+    assert os.path.isfile(global_max_feat_file)
     assert drop_strategy in ['block_video', 'block_sent', 'random', 'keep']
-    wordtoix = np.load(home_folder + 'data0/msvd_wordtoix.npy').tolist()
-    ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
+    wordtoix = np.load(wordtoix_file).tolist()
+    ixtoword = pd.Series(np.load(ixtoword_file).tolist())
+    global_max_feat = np.load(global_max_feat_file)['global_max_feat']
     print 'build model and session...'
     # shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -355,7 +369,8 @@ def train():
                 n_caption_steps=n_caption_steps,
                 n_video_steps=n_video_steps,
                 drop_out_rate = 0.5,
-                bias_init_vector=None)
+                bias_init_vector=None,
+                global_max_feat=global_max_feat)
     tStart_total = time.time()
     n_epoch_steps = int(n_train_samples / batch_size)
     n_steps = n_epochs * n_epoch_steps
@@ -399,18 +414,24 @@ def train():
     temp = set(tf.global_variables())
     # train on the GPU
     with tf.device("/gpu:0"):
-#        train_op = tf.train.AdamOptimizer(learning_rate).minimize(tf_loss)
-        ## initialize variables added for optimizer
+        ## 1. weight decay
+        for var in tf.trainable_variables():
+            decay_loss = tf.multiply(tf.nn.l2_loss(var), 0.0004, name='weight_loss')
+            tf.add_to_collection('losses', decay_loss)
+        tf.add_to_collection('losses', tf_loss)
+        tf_total_loss = tf.add_n(tf.get_collection('losses'), name='total_loss')
+        ## 2. gradient clip
         optimizer = tf.train.AdamOptimizer(learning_rate)
-        gvs = optimizer.compute_gradients(tf_loss)
+        gvs = optimizer.compute_gradients(tf_total_loss)
         # when variable is not related to the loss, grad returned as None
         clip_gvs = [(tf.clip_by_norm(grad, clip_norm), var) for grad, var in gvs if grad is not None]
         for grad, var in gvs:
             if grad is not None:
                 tf.summary.histogram(var.name + '/grad', grad)
                 tf.summary.histogram(var.name + '/data', var)
-        train_op = optimizer.apply_gradients(gvs)
+        train_op = optimizer.apply_gradients(clip_gvs)
 
+    ## initialize variables added for optimizer
     sess.run(tf.variables_initializer(set(tf.global_variables()) - temp))
     # initialize epoch variable in queue reader
     sess.run(tf.local_variables_initializer())
@@ -456,6 +477,7 @@ def train():
         loss_epoch_vid += loss_vid
 
         if step % n_epoch_steps == 0:
+#        if step % 3 == 0:
             epoch += 1
             loss_epoch /= n_epoch_steps
             loss_epoch_cap /= n_epoch_steps
@@ -468,8 +490,8 @@ def train():
             loss_epoch_cap = 0
             loss_epoch_vid = 0
             ######### test sentence generation ##########
-            ixtoword = pd.Series(np.load(home_folder + 'data0/ixtoword.npy').tolist())
             n_val_steps = int(n_val_samples / batch_size)
+#            n_val_steps = 3
             ### TODO: sometimes COCO test show exceptions in the beginning of training ####
             if test_v2s:
                 try:
@@ -505,10 +527,10 @@ def train():
 
             ######### test video generation #############
             if test_v2v:
-                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf)
+                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf, global_max_feat)
                 print 'epoch', epoch, 'video2video mse:', mse_v2v
             if test_s2v:
-                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf)
+                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf, global_max_feat)
                 print 'epoch', epoch, 'caption2video mse:', mse_s2v
             sys.stdout.flush()
 
@@ -531,7 +553,7 @@ def train():
 def test(model_path='models/model-900', video_feat_path=video_feat_path):
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
 #    test_data = val_data   # to evaluate on testing data or validation data
-    ixtoword = pd.Series(np.load('./data0/msvd_ixtoword.npy').tolist())
+    ixtoword = pd.Series(np.load(ixtoword_file).tolist())
 
     model = Video_Caption_Generator(
             dim_image=dim_image,

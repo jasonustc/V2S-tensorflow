@@ -17,12 +17,12 @@ from utils.record_helper import read_and_decode
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_auto_comp_diff/'
-learning_rate = 0.0001
+model_path = '/home/shenxu/V2S-tensorflow/models/auto_comp_large_lr/'
+learning_rate = 0.001
 caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01
-tied_weight = 1.
+tied_weight = 0.1
 cpu_device = "/cpu:0"
 test_v2s = True
 test_v2v = True
@@ -32,7 +32,7 @@ test_s2v = True
 
 class Video_Caption_Generator():
     def __init__(self, dim_image, n_words, dim_hidden, batch_size, n_caption_steps,
-        n_video_steps, drop_out_rate, bias_init_vector=None, global_max_feat=None):
+        n_video_steps, drop_out_rate, bias_init_vector=None):
         self.dim_image = dim_image
         self.n_words = n_words
         self.dim_hidden = dim_hidden
@@ -73,16 +73,12 @@ class Video_Caption_Generator():
         else:
             self.embed_word_b = tf.Variable(tf.zeros([n_words]), name='embed_word_b')
 
-        if global_max_feat is not None:
-            self.global_max_feat = tf.Variable(global_max_feat.astype(np.float32), name='global_max_feat')
-        else:
-            self.global_max_feat = tf.Variable(tf.ones([dim_image]), name='global_max_feat')
 
     def build_model(self, video, video_mask, caption, caption_1, caption_mask):
         caption_mask = tf.cast(caption_mask, tf.float32)
         video_mask = tf.cast(video_mask, tf.float32)
         # for decoding
-        video = tf.divide(video, self.global_max_feat)
+        video = tf.nn.l2_normalize(video, 2) # b x nv x d
         video_flat = tf.reshape(video, [-1, self.dim_image]) # (b x nv) x d
         image_emb = tf.nn.xw_plus_b( video_flat, self.encode_image_W, self.encode_image_b) # (b x nv) x h
         image_emb = tf.reshape(image_emb, [self.batch_size, self.n_video_steps, self.dim_hidden]) # b x nv x h
@@ -180,7 +176,7 @@ class Video_Caption_Generator():
 
     def build_v2s_generator(self, video):
         ####### Encoding Video ##########
-        video = tf.divide(video, self.global_max_feat)
+        video = tf.nn.l2_normalize(video, 2)
         # encoding video
         embed_video = tf.reduce_mean(video, axis=1) # b x d_im
         # embedding into (0, 1) range
@@ -313,7 +309,7 @@ class Video_Caption_Generator():
     def build_v2v_generator(self, video):
         ######## Encoding Stage #########
         # encoding video
-        video = tf.divide(video, self.global_max_feat)
+        video = tf.nn.l2_normalize(video, 2)
         # mean pooling
         embed_video = tf.reduce_mean(video, axis=1) # b x d_im
         # embedding into (-1, 1) range
@@ -359,7 +355,6 @@ def train():
     assert os.path.isfile(global_max_feat_file)
     wordtoix = np.load(wordtoix_file).tolist()
     ixtoword = pd.Series(np.load(ixtoword_file).tolist())
-    global_max_feat = np.load(global_max_feat_file)['global_max_feat']
     print 'build model and session...'
     # shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -371,8 +366,7 @@ def train():
                 n_caption_steps=n_caption_steps,
                 n_video_steps=n_video_steps,
                 drop_out_rate = 0.5,
-                bias_init_vector=None,
-                global_max_feat=global_max_feat)
+                bias_init_vector=None)
     tStart_total = time.time()
     n_epoch_steps = int(n_train_samples / batch_size)
     n_steps = n_epochs * n_epoch_steps
@@ -407,7 +401,7 @@ def train():
     if ckpt and tf.train.checkpoint_exists(ckpt.model_checkpoint_path):
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
         saver.restore(sess, ckpt.model_checkpoint_path)
-        print_tensors_in_checkpoint_file(ckpt.model_checkpoint_path, "", True)
+#        print_tensors_in_checkpoint_file(ckpt.model_checkpoint_path, "", True)
         global_step = get_model_step(ckpt.model_checkpoint_path)
         print 'global_step:', global_step
     else:
@@ -438,7 +432,7 @@ def train():
     sess.run(tf.variables_initializer(set(tf.global_variables()) - temp))
     # initialize epoch variable in queue reader
     sess.run(tf.local_variables_initializer())
-    loss_epoch = 0
+    loss_epoch = 0.
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
     ##### add summaries ######
@@ -449,8 +443,6 @@ def train():
     tf.summary.scalar('loss_lat', tf_loss_lat)
     tf.summary.scalar('loss_caption', tf_loss_cap)
     tf.summary.scalar('loss_tied', tf_loss_tied)
-#    for var in tf.trainable_variables():
-#        summaries.append(tf.histogram_summary(var.op.name, var))
     summary_op = tf.summary.merge_all()
     # write graph architecture to file
     summary_writer = tf.summary.FileWriter(model_path + 'summary', sess.graph)
@@ -467,12 +459,14 @@ def train():
         loss_epoch += loss_val
 
         if step % n_epoch_steps == 0:
+#        if step % 3 == 0:
             epoch += 1
             loss_epoch /= n_epoch_steps
             with tf.device(cpu_device):
                 saver.save(sess, os.path.join(model_path, 'model'), global_step=epoch)
 #            print 'z:', z[0, :10]
             print 'epoch:', epoch, 'loss:', loss_epoch
+            loss_epoch = 0.
             ######### test sentence generation ##########
             n_val_steps = int(n_val_samples / batch_size)
 #            n_val_steps = 3
@@ -505,10 +499,10 @@ def train():
 
             ######### test video generation #############
             if test_v2v:
-                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf, global_max_feat)
+                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf, val_video_label, None)
                 print 'epoch', epoch, 'video2video mse:', mse_v2v
             if test_s2v:
-                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf, global_max_feat)
+                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf, val_video_label, None)
                 print 'epoch', epoch, 'caption2video mse:', mse_s2v
             sys.stdout.flush()
 

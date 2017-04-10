@@ -11,6 +11,7 @@ from collections import defaultdict
 from cocoeval import COCOScorer
 import unicodedata
 import re
+from numpy import linalg as LA
 
 ############### Global Parameters ###############
 video_data_path_train = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/train.tfrecords'
@@ -22,6 +23,9 @@ video_feat_path = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
 #model_path = '/Users/shenxu/Code/V2S-tensorflow/data0/models/'
 test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
 home_folder = '/home/shenxu/V2S-tensorflow/'
+wordtoix_file = home_folder + 'data0/msvd_wordtoix.npy'
+ixtoword_file = home_folder + 'data0/msvd_ixtoword.npy'
+global_max_feat_file = home_folder + 'data0/msvd_max_feat.npz'
 
 ############## Train Parameters #################
 dim_image = 4096*2
@@ -251,13 +255,22 @@ def testing_all(sess, n_steps, ixtoword, caption_tf, name_tf):
 
     return pred_sent, gt_sent, new_IDs_list, gt_dict, pred_dict
 
-def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf):
+def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, global_max_feat):
     avg_loss = 0.
     for ind in xrange(n_steps):
         loss = 0.
-        gt_images, pd_images = sess.run([gt_video_tf, gen_video_tf]) # b x n x d
-        loss = np.sqrt(np.sum((pd_images - gt_images)**2, axis=(1,2)))
-        avg_loss += np.sum(loss) / gt_images.shape[0]
+        gt_images, pd_images, video_label = sess.run([gt_video_tf, gen_video_tf, video_label_tf]) # b x n x d
+        # recover from normalized feats
+        if global_max_feat is not None:
+            pd_images = pd_images * global_max_feat # min-max norm
+        else:
+            # l2 normalization
+            norm_gt_images = np.sqrt(np.sum(gt_images**2, axis=2)) + 1e-6
+            gt_images = gt_images / np.expand_dims(norm_gt_images, axis=2)
+        # only care about frames that counted
+        pd_images = pd_images * np.expand_dims(video_label, 2)
+        loss = np.sum((pd_images - gt_images)**2)
+        avg_loss += loss / np.sum(video_label)
     return avg_loss / n_steps
 
 ######## testing related functions ###############
