@@ -265,8 +265,9 @@ def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, gl
             pd_images = pd_images * global_max_feat # min-max norm
         else:
             # l2 normalization
-            norm_gt_images = np.sqrt(np.sum(gt_images**2, axis=2)) + 1e-6
-            gt_images = gt_images / np.expand_dims(norm_gt_images, axis=2)
+#            norm_gt_images = np.sqrt(np.sum(gt_images**2, axis=2)) + 1e-6
+#            gt_images = gt_images / np.expand_dims(norm_gt_images, axis=2)
+            pass
         # only care about frames that counted
         pd_images = pd_images * np.expand_dims(video_label, 2)
         loss = np.sum((pd_images - gt_images)**2)

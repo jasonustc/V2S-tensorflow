@@ -21,7 +21,7 @@ model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_l2norm/'
 learning_rate = 0.01
 drop_strategy = 'random'
 caption_weight = 1.
-video_weight = 1.
+video_weight = 1e-6
 latent_weight = 0.01
 cpu_device = "/cpu:1"
 test_v2s = True
@@ -73,12 +73,12 @@ class Video_Caption_Generator():
 
 
     def build_model(self, video, video_mask, caption, caption_1, caption_mask):
-        video = tf.nn.l2_normalize(video, 2)
+        video_norm = tf.nn.l2_normalize(video, 2)
         drop_type = tf.placeholder(tf.int32, shape=[])
         caption_mask = tf.cast(caption_mask, tf.float32)
         video_mask = tf.cast(video_mask, tf.float32)
         # for decoding
-        video_flat = tf.reshape(video, [-1, self.dim_image]) # (b x nv) x d
+        video_flat = tf.reshape(video_norm, [-1, self.dim_image]) # (b x nv) x d
         image_emb = tf.nn.xw_plus_b( video_flat, self.encode_image_W, self.encode_image_b) # (b x nv) x h
         image_emb = tf.reshape(image_emb, [self.batch_size, self.n_video_steps, self.dim_hidden]) # b x nv x h
 

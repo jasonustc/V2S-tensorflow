@@ -17,20 +17,17 @@ from utils.record_helper import read_and_decode
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/pool_vae_random/'
+model_path = '/home/shenxu/V2S-tensorflow/models/random_l2_video_cap/'
 learning_rate = 0.001
 drop_strategy = 'random'
 caption_weight = 1.
-video_weight = 1.
+video_weight = 1e-5
 latent_weight = 0.01
-cpu_device = "/cpu:1"
+cpu_device = "/cpu:0"
 test_v2s = True
 test_v2v = True
 test_s2s = True
 test_s2v = True
-video_data_path_train = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/train.tfrecords'
-video_data_path_val = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/val.tfrecords'
-video_data_path_test = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/test.tfrecords'
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -71,13 +68,7 @@ class Video_Caption_Generator():
         else:
             self.embed_word_b = tf.Variable(tf.zeros([n_words]), name='embed_word_b')
 
-        if global_max_feat is not None:
-            self.global_max_feat = tf.Variable(global_max_feat.astype(np.float32), name='global_max_feat')
-        else:
-            self.global_max_feat = tf.Variable(tf.ones([dim_image]), name='global_max_feat')
-
     def build_model(self, video, video_mask, caption, caption_1, caption_mask):
-        video = tf.divide(video, self.global_max_feat)
         drop_type = tf.placeholder(tf.int32, shape=[])
         caption_mask = tf.cast(caption_mask, tf.float32)
         video_mask = tf.cast(video_mask, tf.float32)
@@ -115,6 +106,9 @@ class Video_Caption_Generator():
         ######## Dropout Stage #########
 
         ######## Semantic Learning Stage ########
+        ##### normalization before concatenation
+        output1 = tf.nn.l2_normalize(output1, 1)
+        output2 = tf.nn.l2_normalize(output2, 1)
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         loss_latent, output_semantic = self.vae(input_state)
         ######## Semantic Learning Stage ########
@@ -175,7 +169,6 @@ class Video_Caption_Generator():
 
 
     def build_v2s_generator(self, video):
-        video = tf.divide(video, self.global_max_feat)
         ####### Encoding Video ##########
         # encoding video
         embed_video = tf.reduce_mean(video, axis=1) # b x d_im
@@ -184,6 +177,7 @@ class Video_Caption_Generator():
         ####### Encoding Video ##########
 
         ####### Semantic Mapping ########
+        output1 = tf.nn.l2_normalize(output1, 1)
         output2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
@@ -232,6 +226,7 @@ class Video_Caption_Generator():
         ######## Encoding Stage #########
 
         ####### Semantic Mapping ########
+        output2 = tf.nn.l2_normalize(output2, 1)
         output1 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
@@ -278,6 +273,7 @@ class Video_Caption_Generator():
         ####### Encoding Sentence ##########
 
         ####### Semantic Mapping ########
+        output2 = tf.nn.l2_normalize(output2, 1)
         output1 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.vae(input_state)
@@ -307,7 +303,6 @@ class Video_Caption_Generator():
         return generated_images, lstm4_variables
 
     def build_v2v_generator(self, video):
-        video = tf.divide(video, self.global_max_feat)
         ######## Encoding Stage #########
         # encoding video
         # mean pooling
@@ -317,6 +312,7 @@ class Video_Caption_Generator():
         ######## Encoding Stage #########
 
         ####### Semantic Mapping ########
+        output1 = tf.nn.l2_normalize(output1, 1)
         output2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.vae(input_state)
@@ -527,10 +523,10 @@ def train():
 
             ######### test video generation #############
             if test_v2v:
-                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf, global_max_feat)
+                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf, val_video_label, global_max_feat)
                 print 'epoch', epoch, 'video2video mse:', mse_v2v
             if test_s2v:
-                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf, global_max_feat)
+                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf, val_video_label, global_max_feat)
                 print 'epoch', epoch, 'caption2video mse:', mse_s2v
             sys.stdout.flush()
 
