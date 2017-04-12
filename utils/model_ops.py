@@ -25,7 +25,7 @@ test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
 home_folder = '/home/shenxu/V2S-tensorflow/'
 wordtoix_file = home_folder + 'data0/msvd_wordtoix.npy'
 ixtoword_file = home_folder + 'data0/msvd_ixtoword.npy'
-global_max_feat_file = home_folder + 'data0/msvd_max_feat.npz'
+bias_init_vector_file = home_folder + 'data0/msvd_bias_init_vector.npy'
 
 ############## Train Parameters #################
 dim_image = 4096*2
