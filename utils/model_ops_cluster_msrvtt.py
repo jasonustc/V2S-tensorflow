@@ -37,6 +37,7 @@ clip_norm = 35
 n_train_samples = 130175
 n_val_samples = 9933
 n_test_samples = None
+feat_scale_factor = 0.0150
 ##################################################
 def get_model_step(model_path):
     assert os.path.isfile(model_path)
