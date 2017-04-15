@@ -255,14 +255,14 @@ def testing_all(sess, n_steps, ixtoword, caption_tf, name_tf):
 
     return pred_sent, gt_sent, new_IDs_list, gt_dict, pred_dict
 
-def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, global_max_feat):
+def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, scale=None):
     avg_loss = 0.
     for ind in xrange(n_steps):
         loss = 0.
         gt_images, pd_images, video_label = sess.run([gt_video_tf, gen_video_tf, video_label_tf]) # b x n x d
         # recover from normalized feats
-        if global_max_feat is not None:
-            pd_images = pd_images * global_max_feat # min-max norm
+        if scale is not None:
+            gt_images = scale * gt_images
         else:
             # l2 normalization
 #            norm_gt_images = np.sqrt(np.sum(gt_images**2, axis=2)) + 1e-6

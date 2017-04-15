@@ -17,17 +17,20 @@ from utils.record_helper import read_and_decode
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/random_sent_emb/'
+model_path = '/home/shenxu/V2S-tensorflow/models/random_sent_emb_l2norm/'
 learning_rate = 0.0001
-drop_strategy = 'keep'
+drop_strategy = 'random'
 caption_weight = 1.
 video_weight = 1e-5
 latent_weight = 0.01
-cpu_device = "/cpu:0"
+cpu_device = "/cpu:1"
 test_v2s = True
 test_v2v = True
 test_s2s = True
 test_s2v = True
+video_data_path_train = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/train.tfrecords'
+video_data_path_val = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/val.tfrecords'
+video_data_path_test = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/test.tfrecords'
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -95,6 +98,8 @@ class Video_Caption_Generator():
         output2 = tf.nn.tanh(tf.matmul(sent_feat, self.sent_emb)) # b x h
         tf.summary.histogram('output2', output2)
         tf.summary.histogram('output1', output1)
+        output1 = tf.nn.l2_normalize(output1, 1)
+        output2 = tf.nn.l2_normalize(output2, 1)
         ######## Encoding Stage #########
 
         #### 0: keep both 1: keep video only 2: keep sentence only
@@ -177,6 +182,7 @@ class Video_Caption_Generator():
         ####### Encoding Video ##########
 
         ####### Semantic Mapping ########
+        output1 = tf.nn.l2_normalize(output1, 1)
         output2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
@@ -220,6 +226,7 @@ class Video_Caption_Generator():
             word_vec.append(tf.multiply(self.bias_init_vector, current_loc))
         sent_feat = tf.reduce_sum(tf.stack(word_vec), axis=0) # b x n_words
         output2 = tf.nn.tanh(tf.matmul(sent_feat, self.sent_emb)) # b x h
+        output2 = tf.nn.l2_normalize(output2, 1)
         ######## Encoding Stage #########
 
         ####### Semantic Mapping ########
@@ -262,6 +269,7 @@ class Video_Caption_Generator():
             word_vec.append(tf.multiply(self.bias_init_vector, current_loc))
         sent_feat = tf.reduce_sum(tf.stack(word_vec), axis=0) # b x n_words
         output2 = tf.nn.tanh(tf.matmul(sent_feat, self.sent_emb)) # b x h
+        output2 = tf.nn.l2_normalize(output2, 1)
         ####### Encoding Sentence ##########
 
         ####### Semantic Mapping ########
@@ -302,6 +310,7 @@ class Video_Caption_Generator():
         embed_video = tf.reduce_mean(video, axis=1) # b x d_im
         # embedding into (-1, 1) range
         output1 = tf.nn.tanh(tf.nn.xw_plus_b(embed_video, self.encode_image_W, self.encode_image_b)) # b x h
+        output1 = tf.nn.l2_normalize(output1, 1)
         ######## Encoding Stage #########
 
         ####### Semantic Mapping ########

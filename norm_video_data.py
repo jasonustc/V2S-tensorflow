@@ -17,6 +17,8 @@ from utils.record_helper import read_and_decode
 import random
 
 batch_size = 50
+video_data_path_train = '/disk_2T/shenxu/msrvtt_feat_vgg_c3d_batch/train.tfrecords'
+n_train_samples = 130175
 
 def norm():
     assert os.path.isfile(video_data_path_train)
@@ -45,7 +47,7 @@ def norm():
         global_max_feat = np.maximum(global_max_feat, max_feat)
         global_min_feat = np.minimum(global_min_feat, min_feat)
 
-    np.savez('msvd_max_feat', global_max_feat=global_max_feat, global_min_feat=global_min_feat)
+    np.savez('msrvtt_max_feat', global_max_feat=global_max_feat, global_min_feat=global_min_feat)
     print 'global_max_values:'
     print global_max_feat[0:100]
     print global_max_feat[-100:]
