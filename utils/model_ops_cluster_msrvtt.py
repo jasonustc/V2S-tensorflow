@@ -21,6 +21,8 @@ video_feat_path = '/data11/shenxu/msrvtt_feat_vgg_c3d_batch/'
 #model_path = '/Users/shenxu/Code/V2S-tensorflow/data0/models/'
 test_data_folder = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/'
 home_folder = '/home/shenxu/V2S-tensorflow/'
+wordtoix_file = '/home/shenxu/V2S-tensorflow/data0/msrvtt_wordtoix.npy'
+ixtoword_file = '/home/shenxu/V2S-tensorflow/data0/msrvtt_ixtoword.npy'
 
 ############## Train Parameters #################
 dim_image = 4096*2
@@ -245,12 +247,22 @@ def testing_all(sess, n_steps, ixtoword, caption_tf, name_tf):
 
     return pred_sent, gt_sent, new_IDs_list, gt_dict, pred_dict
 
-def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf):
+def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, scale=None):
     avg_loss = 0.
     for ind in xrange(n_steps):
         loss = 0.
-        gt_images, pd_images = sess.run([gt_video_tf, gen_video_tf]) # b x n x d
-        loss = np.sqrt(np.sum((pd_images - gt_images)**2, axis=(1,2)))
-        avg_loss += np.sum(loss) / gt_images.shape[0]
+        gt_images, pd_images, video_label = sess.run([gt_video_tf, gen_video_tf, video_label_tf]) # b x n x d
+        # recover from normalized feats
+        if scale is not None:
+            gt_images = scale * gt_images
+        else:
+            # l2 normalization
+#            norm_gt_images = np.sqrt(np.sum(gt_images**2, axis=2)) + 1e-6
+#            gt_images = gt_images / np.expand_dims(norm_gt_images, axis=2)
+            pass
+        # only care about frames that counted
+        pd_images = pd_images * np.expand_dims(video_label, 2)
+        loss = np.sum((pd_images - gt_images)**2)
+        avg_loss += loss / np.sum(video_label)
     return avg_loss / n_steps
 
