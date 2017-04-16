@@ -497,6 +497,7 @@ def train():
                     print "PD:  " + pred_dict[key][0]['caption']
                     print '-------'
                 print '############## video to sentence result #################'
+                print 'epoch:', epoch
                 [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_v2s_tf, val_fname)
                 scorer = COCOScorer()
                 total_score = scorer.score(gt_dict, pred_dict, id_list)
@@ -510,6 +511,7 @@ def train():
                     print "PD:  " + pred_dict[key][0]['caption']
                     print '-------'
                 print '############## sentence to sentence result #################'
+                print 'epoch:', epoch
                 [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, n_val_steps, ixtoword, val_s2s_tf, val_fname)
                 scorer = COCOScorer()
                 total_score = scorer.score(gt_dict, pred_dict, id_list)

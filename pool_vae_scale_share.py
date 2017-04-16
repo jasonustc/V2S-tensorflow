@@ -32,7 +32,7 @@ test_s2v = True
 
 class Video_Caption_Generator():
     def __init__(self, dim_image, n_words, dim_hidden, batch_size, n_caption_steps,
-        n_video_steps, drop_out_rate, bias_init_vector=None, global_max_feat=None):
+        n_video_steps, drop_out_rate, bias_init_vector=None):
         self.dim_image = dim_image
         self.n_words = n_words
         self.dim_hidden = dim_hidden
@@ -517,10 +517,10 @@ def train():
 
             ######### test video generation #############
             if test_v2v:
-                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf, val_video_label, global_max_feat)
+                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf, val_video_label, feat_scale_factor)
                 print 'epoch', epoch, 'video2video mse:', mse_v2v
             if test_s2v:
-                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf, val_video_label, global_max_feat)
+                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf, val_video_label, feat_scale_factor)
                 print 'epoch', epoch, 'caption2video mse:', mse_s2v
             sys.stdout.flush()
 
