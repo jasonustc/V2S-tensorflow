@@ -17,17 +17,18 @@ from utils.record_helper import read_and_decode
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_by_max/'
+model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_v2s/'
 learning_rate = 0.001
-drop_strategy = 'random'
+#['block_video', 'block_sent', 'random', 'keep']
+drop_strategy = 'block_sent'
 caption_weight = 1.
-video_weight = 1.
+video_weight = 0.
 latent_weight = 0.01
 cpu_device = "/cpu:0"
 test_v2s = True
-test_v2v = True
-test_s2s = True
-test_s2v = True
+test_v2v = False
+test_s2s = False
+test_s2v = False
 #### custom parameters #####
 
 class Video_Caption_Generator():
