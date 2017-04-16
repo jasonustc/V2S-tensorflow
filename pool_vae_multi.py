@@ -73,6 +73,7 @@ class Video_Caption_Generator():
         caption_mask = tf.cast(caption_mask, tf.float32)
         video_mask = tf.cast(video_mask, tf.float32)
         # for decoding
+        video = video * tf.constant(feat_scale_factor)
         video_flat = tf.reshape(video, [-1, self.dim_image]) # (b x nv) x d
         image_emb = tf.nn.xw_plus_b( video_flat, self.encode_image_W, self.encode_image_b) # (b x nv) x h
         image_emb = tf.reshape(image_emb, [self.batch_size, self.n_video_steps, self.dim_hidden]) # b x nv x h
@@ -168,6 +169,7 @@ class Video_Caption_Generator():
                 with tf.variable_scope("LSTM4"):
                     output4, state4 = self.lstm4_dropout(video_prev, state4)
                 decode_image = tf.nn.xw_plus_b(output4, self.decode_image_W, self.decode_image_b) # b x d_im
+                decode_image = tf.nn.sigmoid(decode_image)
                 video_prev = image_emb[:, i, :] # b x h
                 euclid_loss = tf.reduce_sum(tf.square(tf.subtract(decode_image, video[:,i,:])),
                     axis=1, keep_dims=True) # b x 1
@@ -184,6 +186,7 @@ class Video_Caption_Generator():
 
     def build_v2s_generator(self, video):
         ####### Encoding Video ##########
+        video = video * tf.constant(feat_scale_factor)
         # encoding video
         embed_video = tf.reduce_mean(video, axis=1) # b x d_im
         # embedding into (0, 1) range
@@ -222,7 +225,7 @@ class Video_Caption_Generator():
         generated_words = tf.transpose(tf.stack(generated_words)) # n_caption_step x 1
         return generated_words, lstm3_variables
 
-    def build_s2s_generator(self, caption_1):
+    def build_s2s_generator(self, caption_1, caption_2, caption_3, caption_4, caption_5):
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         state2 = (c_init, m_init) # 2 x b x h
@@ -281,7 +284,7 @@ class Video_Caption_Generator():
         generated_words = tf.transpose(tf.stack(generated_words)) # n_caption_step x 1
         return generated_words, lstm3_variables
 
-    def build_s2v_generator(self, sent):
+    def build_s2v_generator(self, caption_1, caption_2, caption_3, caption_4, caption_5):
         ####### Encoding Sentence ##########
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
@@ -328,8 +331,9 @@ class Video_Caption_Generator():
                     lstm4_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
 
                 image_prev = tf.nn.xw_plus_b(output4, self.decode_image_W, self.decode_image_b)
+                decode_image = tf.nn.sigmoid(image_prev)
                 image_emb = tf.nn.xw_plus_b(image_prev, self.encode_image_W, self.encode_image_b)
-                generated_images.append(image_prev) # b x d_im
+                generated_images.append(decode_image) # b x d_im
         ####### Decoding ########
         generated_images = tf.transpose(tf.stack(generated_images), [1, 0, 2]) # b x n_video_step x d_im
 
@@ -338,6 +342,7 @@ class Video_Caption_Generator():
     def build_v2v_generator(self, video):
         ######## Encoding Stage #########
         # encoding video
+        video = video * tf.constant(feat_scale_factor)
         # mean pooling
         embed_video = tf.reduce_mean(video, axis=1) # b x d_im
         # embedding into (-1, 1) range
@@ -368,8 +373,9 @@ class Video_Caption_Generator():
                     lstm4_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
 
                 image_prev = tf.nn.xw_plus_b(output4, self.decode_image_W, self.decode_image_b)
+                decode_image = tf.nn.sigmoid(image_prev)
                 image_emb = tf.nn.xw_plus_b(image_prev, self.encode_image_W, self.encode_image_b)
-                generated_images.append(image_prev) # b x d_im
+                generated_images.append(decode_image) # b x d_im
         ####### Decoding ########
         generated_images = tf.transpose(tf.stack(generated_images), [1, 0, 2]) # b x n_video_step x d_im
 

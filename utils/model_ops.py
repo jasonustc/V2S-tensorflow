@@ -42,6 +42,7 @@ clip_norm = 35
 n_train_samples = 49659
 n_val_samples = 4149
 n_test_samples = 27020
+feat_scale_factor = 0.013
 ##################################################
 
 ######### general operations #####################
