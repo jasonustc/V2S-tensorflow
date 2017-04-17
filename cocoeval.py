@@ -7,7 +7,7 @@ import os, cPickle
 class COCOScorer(object):
     def __init__(self):
         print 'init COCO-EVAL scorer'
-            
+
     def score(self, GT, RES, IDs):
         self.eval = {}
         self.imgToEval = {}
@@ -49,7 +49,7 @@ class COCOScorer(object):
                 self.setEval(score, method)
                 self.setImgToEvalImgs(scores, IDs, method)
                 print "%s: %0.3f"%(method, score)
-                
+
         #for metric, score in self.eval.items():
         #    print '%s: %.3f'%(metric, score)
         return self.eval

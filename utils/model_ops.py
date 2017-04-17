@@ -42,6 +42,7 @@ clip_norm = 35
 n_train_samples = 49659
 n_val_samples = 4149
 n_test_samples = 27020
+feat_scale_factor = 0.013
 ##################################################
 
 ######### general operations #####################
@@ -253,7 +254,7 @@ def testing_all(sess, n_steps, ixtoword, caption_tf, name_tf):
             new_IDs_list.append(str(k))
             pred_dict[str(k)] = v
 
-    return pred_sent, gt_sent, new_IDs_list, gt_dict, pred_dict
+    return pred_sent, gt_sent, new_IDs_list, gt_dict, pred_dict, new_flist
 
 def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, scale=None):
     avg_loss = 0.

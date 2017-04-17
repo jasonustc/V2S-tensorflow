@@ -17,16 +17,16 @@ from utils.record_helper import read_and_decode
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_by_max/'
+model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_s2v/'
 learning_rate = 0.001
-drop_strategy = 'random'
-caption_weight = 1.
+drop_strategy = 'block_video'
+caption_weight = 0.
 video_weight = 1.
 latent_weight = 0.01
 cpu_device = "/cpu:0"
-test_v2s = True
-test_v2v = True
-test_s2s = True
+test_v2s = False
+test_v2v = False
+test_s2s = False
 test_s2v = True
 #### custom parameters #####
 
