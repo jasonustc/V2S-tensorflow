@@ -263,11 +263,12 @@ def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, sc
     for ind in xrange(n_steps):
         loss = 0.
         gt_images, pd_images, video_label = sess.run([gt_video_tf, gen_video_tf, video_label_tf]) # b x n x d
+        gt_images = gt_images[:, 1:, :]
         # recover from normalized feats
         if scale is not None:
             gt_images = scale * gt_images
         # only care about frames that counted
-        pd_images = pd_images * np.expand_dims(video_label, 2)
+        pd_images = pd_images * np.expand_dims(video_label[:, 1:], 2)
         loss = np.sum((pd_images - gt_images)**2)
         avg_loss += loss / np.sum(video_label)
     return avg_loss / n_steps
@@ -278,11 +279,12 @@ def get_demo_video(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, vid
     for i in xrange(n_steps):
         loss = 0.
         gt_images, pd_images, video_label, video_name = sess.run([gt_video_tf, gen_video_tf, video_label_tf, video_name_tf]) # b x n x d
+        gt_images = gt_images[:, 1:, :]
         # recover from normalized feats
         if scale is not None:
             gt_images = scale * gt_images
         # only care about frames that counted
-        pd_images = pd_images * np.expand_dims(video_label, 2)
+        pd_images = pd_images * np.expand_dims(video_label[:, 1:], 2)
         loss = np.sum((pd_images - gt_images)**2, axis=(1,2))
         label_sum = np.sum(video_label, axis=1)
         avg_loss = loss / label_sum

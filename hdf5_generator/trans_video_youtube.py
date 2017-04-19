@@ -91,10 +91,12 @@ def build_vocab(train_set, dataset_name):
 def  load_frame(frame_path, resize_height=None, resize_width=None):
     assert os.path.isfile(frame_path)
     frame_data = cv2.imread(frame_path)
+    pdb.set_trace()
 #    cv2.imwrite('test.jpg', frame_data)
 #    print frame_data.shape
     if resize_height and resize_width:
         frame_data = cv2.resize(frame_data, (resize_width, resize_height))
+        pdb.set_trace()
 #        cv2.imwrite('test_resize.jpg', frame_data)
 #        print frame_data.shape
     return np.reshape(frame_data, (resize_width*resize_height*3,))
@@ -424,7 +426,7 @@ def getlist(feature_folder_name, split):
 if __name__ == '__main__':
     dataset = np.load(home_folder + 'data0/msvd_dataset.npz')
     wordtoix, _ = build_vocab(dataset['train'], 'msvd')
-    trans_video_youtube_record(dataset['train'], 'train', vgg_feat_name, c3d_feat_name, wordtoix)
+    trans_video_youtube_record(dataset['train'][:3], 'train_for_test', vgg_feat_name, c3d_feat_name, wordtoix)
 #    trans_video_msrvtt_record(dataset['val'], 'val', vgg_feat_name, c3d_feat_name, wordtoix)
 #    trans_video_youtube_record(dataset['test'], 'test', vgg_feat_name, c3d_feat_name, wordtoix)
 #    getlist(feature_folder,'train')

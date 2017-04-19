@@ -18,7 +18,7 @@ import random
 
 #### custom parameters #####
 model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_frame/'
-learning_rate = 0.001
+learning_rate = 0.0001
 drop_strategy = 'random'
 caption_weight = 1.
 video_weight = 1.
@@ -317,7 +317,7 @@ class Video_Caption_Generator():
 
         with tf.variable_scope("model") as scope:
             scope.reuse_variables()
-            for i in range(self.n_video_steps):
+            for i in range(self.n_video_steps - 1):
                 with tf.variable_scope("LSTM4") as vs:
                     output4, state4 = self.lstm4(frame_prev, state4) # b x h
                     lstm4_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
@@ -504,10 +504,10 @@ def train():
 
             ######### test video generation #############
             if test_v2v:
-                mse_v2v = test_all_videos(sess, n_val_steps, val_data, val_v2v_tf, val_video_label, pixel_scale_factor)
+                mse_v2v = test_all_videos(sess, n_val_steps, val_frame_data, val_v2v_tf, val_video_label, pixel_scale_factor)
                 print 'epoch', epoch, 'video2video mse:', mse_v2v
             if test_s2v:
-                mse_s2v = test_all_videos(sess, n_val_steps, val_data, val_s2v_tf, val_video_label, pixel_scale_factor)
+                mse_s2v = test_all_videos(sess, n_val_steps, val_frame_data, val_s2v_tf, val_video_label, pixel_scale_factor)
                 print 'epoch', epoch, 'caption2video mse:', mse_s2v
             sys.stdout.flush()
 
