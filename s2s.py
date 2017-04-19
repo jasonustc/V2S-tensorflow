@@ -21,6 +21,7 @@ cpu_device = '/cpu:1'
 video_data_path_train = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/train.tfrecords'
 video_data_path_val = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/val.tfrecords'
 video_data_path_test = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/test.tfrecords'
+dim_image = 2*4096
 #### custom parameters #####
 
 class Video_Caption_Generator():

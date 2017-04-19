@@ -103,6 +103,52 @@ def read_and_decode(filename):
 		'caption_id_2': tf.FixedLenFeature([], tf.string),
 		'caption_id_3': tf.FixedLenFeature([], tf.string),
 		'caption_id_4': tf.FixedLenFeature([], tf.string),
+		'caption_id_5': tf.FixedLenFeature([], tf.string)
+		})
+	data = tf.decode_raw(features['data'], tf.float32)
+	data = tf.reshape(data, [45, 8192])
+	encode_data = tf.decode_raw(features['encode_data'], tf.float32)
+	encode_data = tf.reshape(encode_data, [45, 8192])
+	video_label = tf.decode_raw(features['video_label'], tf.int32)
+	video_label = tf.reshape(video_label, [45])
+	caption_label = tf.decode_raw(features['caption_label'], tf.int32)
+	caption_label = tf.reshape(caption_label, [35])
+	caption_id = tf.decode_raw(features['caption_id'], tf.int32)
+	caption_id = tf.reshape(caption_id, [35])
+	caption_id_1 = tf.decode_raw(features['caption_id_1'], tf.int32)
+	caption_id_1 = tf.reshape(caption_id_1, [35])
+	caption_id_2 = tf.decode_raw(features['caption_id_2'], tf.int32)
+	caption_id_2 = tf.reshape(caption_id_2, [35])
+	caption_id_3 = tf.decode_raw(features['caption_id_3'], tf.int32)
+	caption_id_3 = tf.reshape(caption_id_3, [35])
+	caption_id_4 = tf.decode_raw(features['caption_id_4'], tf.int32)
+	caption_id_4 = tf.reshape(caption_id_4, [35])
+	caption_id_5 = tf.decode_raw(features['caption_id_5'], tf.int32)
+	caption_id_5 = tf.reshape(caption_id_5, [35])
+        fname = features['fname']
+        title = features['title']
+        return data, encode_data, fname, title, video_label, caption_label, caption_id, \
+            caption_id_1, caption_id_2, caption_id_3, caption_id_4, caption_id_5
+
+def read_and_decode_with_frame(filename):
+	# why num_epoches not work here?
+	filename_queue = tf.train.string_input_producer([filename])
+	reader = tf.TFRecordReader()
+	_, serialized_example = reader.read(filename_queue)
+	features = tf.parse_single_example(
+		serialized_example,
+		features = {
+		'data': tf.FixedLenFeature([], tf.string),
+		'encode_data': tf.FixedLenFeature([], tf.string),
+		'fname': tf.VarLenFeature(tf.string),
+		'title': tf.VarLenFeature(tf.string),
+		'video_label': tf.FixedLenFeature([], tf.string),
+		'caption_label': tf.FixedLenFeature([], tf.string),
+		'caption_id': tf.FixedLenFeature([], tf.string),
+		'caption_id_1': tf.FixedLenFeature([], tf.string),
+		'caption_id_2': tf.FixedLenFeature([], tf.string),
+		'caption_id_3': tf.FixedLenFeature([], tf.string),
+		'caption_id_4': tf.FixedLenFeature([], tf.string),
 		'caption_id_5': tf.FixedLenFeature([], tf.string),
                 'frame_data': tf.FixedLenFeature([], tf.string)
 		})
