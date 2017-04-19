@@ -12,11 +12,12 @@ from cocoeval import COCOScorer
 import unicodedata
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 from modules.variational_autoencoder import VAE
-from utils.model_ops import *
+from utils.model_ops_msrvtt import *
 from utils.record_helper import read_and_decode
+
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/s2s/'
-learning_rate = 0.0001
+model_path = '/data11/shenxu/msrvtt_models/s2s/'
+learning_rate = 0.001
 cpu_device = '/cpu:1'
 #### custom parameters #####
 
@@ -140,8 +141,8 @@ def train():
     assert os.path.isfile(video_data_path_val)
     assert os.path.isdir(model_path)
     print 'load meta data...'
-    wordtoix = np.load(home_folder + 'data0/msvd_wordtoix.npy').tolist()
-    ixtoword = pd.Series(np.load(home_folder + 'data0/msvd_ixtoword.npy').tolist())
+    wordtoix = np.load(home_folder + 'data0/msrvtt_wordtoix.npy').tolist()
+    ixtoword = pd.Series(np.load(home_folder + 'data0/msrvtt_ixtoword.npy').tolist())
     print 'build model and session...'
     # shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -258,7 +259,7 @@ def train():
 def test(model_path='models/model-900', video_feat_path=video_feat_path):
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
 #    test_data = val_data   # to evaluate on testing data or validation data
-    ixtoword = pd.Series(np.load('./data0/msvd_ixtoword.npy').tolist())
+    ixtoword = pd.Series(np.load('./data0/msrvtt_ixtoword.npy').tolist())
 
     model = Video_Caption_Generator(
             dim_image=dim_image,
