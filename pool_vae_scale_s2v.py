@@ -18,16 +18,16 @@ import random
 
 #### custom parameters #####
 model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_s2v/'
-learning_rate = 0.001
+learning_rate = 0.0001
 drop_strategy = 'block_video'
 caption_weight = 0.
 video_weight = 1.
-latent_weight = 0.01
+latent_weight = 0.001
 cpu_device = "/cpu:0"
 test_v2s = False
 test_v2v = False
 test_s2s = False
-test_s2v = True
+test_s2v = False
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -656,14 +656,14 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
     if test_s2v:
         mse_s2v = test_all_videos(sess, n_test_steps, val_data, val_s2v_tf, val_video_label, feat_scale_factor)
         print 'caption2video mse:', mse_s2v
+    demo_video = get_demo_video(sess, n_test_steps, val_data, val_s2v_tf, val_video_label, val_fname, feat_scale_factor)
+    np.save('msvd_demo_video.npy', demo_video)
     sys.stdout.flush()
     coord.request_stop()
     coord.join(threads)
     tstop = time.time()
     print "Total Time Cost:", round(tstop - tstart, 2), "s"
     sess.close()
-
-    return total_score_1, total_score_2
 
 if __name__ == '__main__':
     args = parse_args()

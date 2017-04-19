@@ -17,20 +17,18 @@ from utils.record_helper import read_and_decode
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_s2s/'
+model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_v2v/'
 learning_rate = 0.0001
-drop_strategy = 'block_video'
-caption_weight = 1.
-video_weight = 0.
+#['block_video', 'block_sent', 'random', 'keep']
+drop_strategy = 'block_sent'
+caption_weight = 0.
+video_weight = 1.
 latent_weight = 0.001
-cpu_device = "/cpu:1"
+cpu_device = "/cpu:0"
 test_v2s = False
-test_v2v = False
-test_s2s = True
+test_v2v = True
+test_s2s = False
 test_s2v = False
-video_data_path_train = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/train.tfrecords'
-video_data_path_val = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/val.tfrecords'
-video_data_path_test = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/test.tfrecords'
 #### custom parameters #####
 
 class Video_Caption_Generator():

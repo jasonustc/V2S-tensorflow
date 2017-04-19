@@ -14,9 +14,9 @@ import re
 from numpy import linalg as LA
 
 ############### Global Parameters ###############
-video_data_path_train = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/train.tfrecords'
-video_data_path_val = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/val.tfrecords'
-video_data_path_test = '/home/shenxu/data/msvd_feat_vgg_c3d_batch/test.tfrecords'
+video_data_path_train = '/home/shenxu/data/msvd_feat_vgg_c3d_frame/train.tfrecords'
+video_data_path_val = '/home/shenxu/data/msvd_feat_vgg_c3d_frame/val.tfrecords'
+video_data_path_test = '/home/shenxu/data/msvd_feat_vgg_c3d_frame/test.tfrecords'
 # seems to be no use
 video_feat_path = '/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/'
 
@@ -28,7 +28,8 @@ ixtoword_file = home_folder + 'data0/msvd_ixtoword.npy'
 bias_init_vector_file = home_folder + 'data0/msvd_bias_init_vector.npy'
 
 ############## Train Parameters #################
-dim_image = 4096*2
+dim_image = 6912
+dim_video_feat = 2*4096
 dim_hidden= 512
 n_video_steps = 45
 n_caption_steps = 35
@@ -43,6 +44,7 @@ n_train_samples = 49659
 n_val_samples = 4149
 n_test_samples = 27020
 feat_scale_factor = 0.013
+pixel_scale_factor = 0.00392
 ##################################################
 
 ######### general operations #####################
@@ -264,15 +266,35 @@ def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, sc
         # recover from normalized feats
         if scale is not None:
             gt_images = scale * gt_images
-        else:
-            # l2 normalization
-#            norm_gt_images = np.sqrt(np.sum(gt_images**2, axis=2)) + 1e-6
-#            gt_images = gt_images / np.expand_dims(norm_gt_images, axis=2)
-            pass
         # only care about frames that counted
         pd_images = pd_images * np.expand_dims(video_label, 2)
         loss = np.sum((pd_images - gt_images)**2)
         avg_loss += loss / np.sum(video_label)
     return avg_loss / n_steps
 
-######## testing related functions ###############
+def get_demo_video(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, video_name_tf, scale=None):
+    demo_video = {}
+    min_loss = 10000.
+    for i in xrange(n_steps):
+        loss = 0.
+        gt_images, pd_images, video_label, video_name = sess.run([gt_video_tf, gen_video_tf, video_label_tf, video_name_tf]) # b x n x d
+        # recover from normalized feats
+        if scale is not None:
+            gt_images = scale * gt_images
+        # only care about frames that counted
+        pd_images = pd_images * np.expand_dims(video_label, 2)
+        loss = np.sum((pd_images - gt_images)**2, axis=(1,2))
+        label_sum = np.sum(video_label, axis=1)
+        avg_loss = loss / label_sum
+        ind = np.argmin(avg_loss)
+        if avg_loss[ind] < min_loss:
+            demo_video['name'] = video_name.values[ind]
+            demo_video['pd_images'] = pd_images[ind, :, :]
+            demo_video['gt_images'] = gt_images[ind, :, :]
+            demo_video['video_label'] = video_label[ind, :]
+            demo_video['loss'] = avg_loss[ind]
+            min_loss = avg_loss[ind]
+            print 'min_loss of batch', i, ':', avg_loss[ind]
+    return demo_video
+
+######## testing related functions ###########o####

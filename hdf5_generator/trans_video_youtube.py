@@ -11,17 +11,29 @@ import sys
 sys.path.insert(0, os.path.abspath('../'))
 from utils.record_helper import write_data_as_record
 import tensorflow as tf
+import cv2
 
 #feature_folder = '/disk_2T/shenxu/msrvtt_feat_vgg_c3d_batch/'
-feature_folder = '/home/shenxu/data/test_data/'
-vgg_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_train/'
-vgg_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_val/'
-c3d_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_train/'
-c3d_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_val/'
-vgg_feat_name = 'frame_vgg'
-c3d_feat_name = 'frame_c3d'
+#vgg_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_train/'
+#vgg_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_val/'
+#vgg_feat_folder_test = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_test/'
+#c3d_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_train/'
+#c3d_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_val/'
+#c3d_feat_folder_test = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_test/'
+#v2s_json = 'msrvtt2sent.json'
+#vgg_feat_name = 'frame_vgg'
+#c3d_feat_name = 'frame_c3d'
+home_folder = '/home/shenxu/V2S-tensorflow/'
+vgg_feat_name = 'fc6'
+c3d_feat_name = 'fc6'
+feature_folder = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/'
+vgg_feat_folder = '/disk_2T/shenxu/msvd_feat_vgg/'
+c3d_feat_folder = '/disk_2T/shenxu/msvd_feat_c3d/'
 word_count_threshold = 1
-v2s_json = 'msrvtt2sent.json'
+v2s_json = home_folder + 'msvd2sent.json'
+video_frame_folder = '/disk_2T/shenxu/YoutubeClip_frames/'
+resize_height = 36
+resize_width = 64
 
 def get_cap_ids(title, wordtoix, cap_length, pad='post'):
     assert pad in ['pre', 'post']
@@ -63,22 +75,42 @@ def preProBuildWordVocab(sentence_iterator, word_count_threshold=5): # borrowed 
     bias_init_vector -= np.max(bias_init_vector) # shift to nice numeric range
     return wordtoix, ixtoword, bias_init_vector
 
-def build_vocab(train_set):
+def build_vocab(train_set, dataset_name):
     re = json.load(open(v2s_json))
+    print 'load json from', v2s_json
     train_title = []
     for video in train_set:
         for title in re[video]:
             train_title.append(title)
     wordtoix, ixtoword, bias_init_vector = preProBuildWordVocab(train_title, word_count_threshold)
-    np.save('msvd_wordtoix', wordtoix)
-    np.save('msvd_ixtoword', ixtoword)
-    np.save('msvd_bias_init_vector', bias_init_vector)
+    np.save(dataset_name + '_wordtoix', wordtoix)
+    np.save(dataset_name + '_ixtoword', ixtoword)
+    np.save(dataset_name + '_bias_init_vector', bias_init_vector)
     return wordtoix, ixtoword
+
+def  load_frame(frame_path, resize_height=None, resize_width=None):
+    assert os.path.isfile(frame_path)
+    frame_data = cv2.imread(frame_path)
+#    cv2.imwrite('test.jpg', frame_data)
+#    print frame_data.shape
+    if resize_height and resize_width:
+        frame_data = cv2.resize(frame_data, (resize_width, resize_height))
+#        cv2.imwrite('test_resize.jpg', frame_data)
+#        print frame_data.shape
+    return np.reshape(frame_data, (resize_width*resize_height*3,))
+
+def load_video_frames(video_path, resize_height=None, resize_width=None):
+    assert os.path.isdir(video_path)
+    frames = os.listdir(video_path)
+    frame_data = []
+    for frame in frames:
+        frame_data.append(load_frame(os.path.join(video_path, frame), resize_height=resize_height, resize_width=resize_width))
+    return np.stack(frame_data)
 
 def trans_video_youtube_record(datasplit_list, datasplit, vgg_feat_name,
         c3d_feat_name, wordtoix):
     assert len(datasplit_list) > 0
-    re = json.load(open('msvd2sent.json'))
+    re = json.load(open(home_folder + 'msvd2sent.json'))
     n_length = 45
     cap_length = 35
 
@@ -89,18 +121,22 @@ def trans_video_youtube_record(datasplit_list, datasplit, vgg_feat_name,
     writer = tf.python_io.TFRecordWriter(filename)
     for ele in datasplit_list:
         vgg_feat_file = vgg_feat_folder + ele + '.h5'
-        print vgg_feat_file
         c3d_feat_file = c3d_feat_folder + ele + '_c3d_' + c3d_feat_name + '-1.h5'
+        frame_folder = video_frame_folder + ele
         assert os.path.isfile(vgg_feat_file)
         assert os.path.isfile(c3d_feat_file)
+        assert os.path.isdir(frame_folder)
         vgg_feat = np.squeeze(np.asarray(h5py.File(vgg_feat_file)[vgg_feat_name]))
         c3d_feat = np.squeeze(np.asarray(h5py.File(c3d_feat_file)['data']))
+        frame_feat = load_video_frames(frame_folder, resize_height=resize_height, resize_width=resize_width)
         # to solve the number of frames mismatch between different videos
         sample_data = np.zeros([n_length, 4096 * 2])
         encode_data = np.zeros([n_length, 4096 * 2])
+        frame_data = np.zeros([n_length, resize_height*resize_width*3])
         concat_feat = np.concatenate((vgg_feat, c3d_feat), axis = 1)
         # post pad
         sample_data[:concat_feat.shape[0], :] = concat_feat
+        frame_data[:frame_feat.shape[0], :] = frame_feat
         # pre pad
         encode_data[-concat_feat.shape[0]:, :] = concat_feat
         video_name = ele
@@ -141,7 +177,7 @@ def trans_video_youtube_record(datasplit_list, datasplit, vgg_feat_name,
 #                    print 'caption_id_4:', cap_id_4[ :]
 #                    print 'caption_id_5:', cap_id_5[ :]
                     write_data_as_record(writer, sample_data, encode_data, video_name, title, vl, capl,
-                        cap_id, cap_id_1, cap_id_2, cap_id_3, cap_id_4, cap_id_5)
+                        cap_id, cap_id_1, cap_id_2, cap_id_3, cap_id_4, cap_id_5, frame_data)
                     cnt += 1
     print 'totally', cnt, 'v2s pairs.'
     writer.close()
@@ -386,9 +422,9 @@ def getlist(feature_folder_name, split):
 
 
 if __name__ == '__main__':
-    dataset = np.load('msrvtt_dataset.npz')
-    wordtoix, _ = build_vocab(dataset['train'])
-    trans_video_msrvtt_record(dataset['train'][:5], 'train', vgg_feat_name, c3d_feat_name, wordtoix)
+    dataset = np.load(home_folder + 'data0/msvd_dataset.npz')
+    wordtoix, _ = build_vocab(dataset['train'], 'msvd')
+    trans_video_youtube_record(dataset['train'], 'train', vgg_feat_name, c3d_feat_name, wordtoix)
 #    trans_video_msrvtt_record(dataset['val'], 'val', vgg_feat_name, c3d_feat_name, wordtoix)
 #    trans_video_youtube_record(dataset['test'], 'test', vgg_feat_name, c3d_feat_name, wordtoix)
 #    getlist(feature_folder,'train')

@@ -391,7 +391,7 @@ def train():
         val_s2v_tf,_,_ = model.build_s2v_generator(val_caption_id_1)
         val_v2v_tf,_ = model.build_v2v_generator(val_data)
 
-    sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
+    sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement= True))
     # check for model file
     with tf.device(cpu_device):
         saver = tf.train.Saver(max_to_keep=100)

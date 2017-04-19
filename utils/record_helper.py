@@ -6,6 +6,9 @@ import os
 import pdb
 import h5py
 
+resize_height = 64
+resize_width = 48
+
 def _int64_feature(value):
 	return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
 def _bytes_feature(value):
@@ -15,7 +18,7 @@ def _float_feature(value):
 
 def write_data_as_record(record_writer, data, encode_data, fname,
 	title, video_label, caption_label, caption_id, caption_id_1,
-	caption_id_2, caption_id_3, caption_id_4, caption_id_5):
+	caption_id_2, caption_id_3, caption_id_4, caption_id_5, frame_data):
 	data_np = np.asarray(data.astype(np.float32))
 	data = data_np.tostring()
 	encode_data_np = np.asarray(encode_data).astype(np.float32)
@@ -36,6 +39,8 @@ def write_data_as_record(record_writer, data, encode_data, fname,
 	caption_id_4 = caption_id_4_np.tostring()
 	caption_id_5_np = np.asarray(caption_id_5).astype(np.int32)
 	caption_id_5 = caption_id_5_np.tostring()
+        frame_data_np = np.asarray(frame_data).astype(np.float32)
+        frame_data = frame_data_np.tostring()
 	# Example contains a Features proto object
 	example = tf.train.Example(
 		# Features contains a map of string to Feature proto objects
@@ -53,7 +58,8 @@ def write_data_as_record(record_writer, data, encode_data, fname,
 		'caption_id_2': _bytes_feature(caption_id_2),
 		'caption_id_3': _bytes_feature(caption_id_3),
 		'caption_id_4': _bytes_feature(caption_id_4),
-		'caption_id_5': _bytes_feature(caption_id_5)
+		'caption_id_5': _bytes_feature(caption_id_5),
+                'frame_data': _bytes_feature(frame_data)
 		}))
 	record_writer.write(example.SerializeToString())
 #	record_writer.close()
@@ -97,7 +103,8 @@ def read_and_decode(filename):
 		'caption_id_2': tf.FixedLenFeature([], tf.string),
 		'caption_id_3': tf.FixedLenFeature([], tf.string),
 		'caption_id_4': tf.FixedLenFeature([], tf.string),
-		'caption_id_5': tf.FixedLenFeature([], tf.string)
+		'caption_id_5': tf.FixedLenFeature([], tf.string),
+                'frame_data': tf.FixedLenFeature([], tf.string)
 		})
 	data = tf.decode_raw(features['data'], tf.float32)
 	data = tf.reshape(data, [45, 8192])
@@ -119,10 +126,12 @@ def read_and_decode(filename):
 	caption_id_4 = tf.reshape(caption_id_4, [35])
 	caption_id_5 = tf.decode_raw(features['caption_id_5'], tf.int32)
 	caption_id_5 = tf.reshape(caption_id_5, [35])
+        frame_data = tf.decode_raw(features['frame_data'], tf.float32)
+        frame_data = tf.reshape(frame_data, [45, resize_height*resize_width*3])
         fname = features['fname']
         title = features['title']
         return data, encode_data, fname, title, video_label, caption_label, caption_id, \
-            caption_id_1, caption_id_2, caption_id_3, caption_id_4, caption_id_5
+            caption_id_1, caption_id_2, caption_id_3, caption_id_4, caption_id_5, frame_data
 #	with tf.Session() as sess:
 #		coord = tf.train.Coordinator()
 #		threads = tf.train.start_queue_runners(sess=sess, coord=coord)
