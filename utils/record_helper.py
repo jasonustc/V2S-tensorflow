@@ -6,8 +6,8 @@ import os
 import pdb
 import h5py
 
-resize_height = 64
-resize_width = 48
+resize_height = 36
+resize_width = 64
 
 def _int64_feature(value):
 	return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))

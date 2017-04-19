@@ -13,11 +13,11 @@ import unicodedata
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 from modules.variational_autoencoder import VAE
 from utils.model_ops import *
-from utils.record_helper import read_and_decode
+from utils.record_helper import read_and_decode_with_frame
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_by_max/'
+model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_frame/'
 learning_rate = 0.001
 drop_strategy = 'random'
 caption_weight = 1.
@@ -356,9 +356,9 @@ def train():
     # preprocess on the CPU
     with tf.device('/cpu:0'):
         train_data, train_encode_data, _, _, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
-            _, _, _, _, train_frame_data = read_and_decode(video_data_path_train)
+            _, _, _, _, train_frame_data = read_and_decode_with_frame(video_data_path_train)
         val_data, val_encode_data, val_fname, val_title, val_video_label, val_caption_label, val_caption_id, val_caption_id_1, \
-            _, _, _, _, val_frame_data = read_and_decode(video_data_path_val)
+            _, _, _, _, val_frame_data = read_and_decode_with_frame(video_data_path_val)
        # random batches
         train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data = \
             tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data],
@@ -375,7 +375,7 @@ def train():
         val_s2v_tf,_,_ = model.build_s2v_generator(val_caption_id_1, val_frame_data)
         val_v2v_tf,_ = model.build_v2v_generator(val_data, val_frame_data)
 
-    sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement= True))
+    sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement= False))
     # check for model file
     with tf.device(cpu_device):
         saver = tf.train.Saver(max_to_keep=100)
