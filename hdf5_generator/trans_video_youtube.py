@@ -13,27 +13,35 @@ from utils.record_helper import write_data_as_record
 import tensorflow as tf
 import cv2
 
-#feature_folder = '/disk_2T/shenxu/msrvtt_feat_vgg_c3d_batch/'
-#vgg_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_train/'
-#vgg_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_val/'
-#vgg_feat_folder_test = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_test/'
-#c3d_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_train/'
-#c3d_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_val/'
-#c3d_feat_folder_test = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_test/'
-#v2s_json = 'msrvtt2sent.json'
-#vgg_feat_name = 'frame_vgg'
-#c3d_feat_name = 'frame_c3d'
 home_folder = '/home/shenxu/V2S-tensorflow/'
-vgg_feat_name = 'fc6'
-c3d_feat_name = 'fc6'
-feature_folder = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/'
-vgg_feat_folder = '/disk_2T/shenxu/msvd_feat_vgg/'
-c3d_feat_folder = '/disk_2T/shenxu/msvd_feat_c3d/'
 word_count_threshold = 1
-v2s_json = home_folder + 'msvd2sent.json'
+
+####################################################################
+feature_folder = '/disk_2T/shenxu/msrvtt_feat_vgg_c3d_frame/'
+vgg_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_train/'
+vgg_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_val/'
+vgg_feat_folder_test = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_test/'
+c3d_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_train/'
+c3d_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_val/'
+c3d_feat_folder_test = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_test/'
+v2s_json = home_folder + 'msrvtt2sent.json'
+vgg_feat_name = 'frame_vgg'
+c3d_feat_name = 'frame_c3d'
+feature_folder = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/'
 video_frame_folder = '/disk_2T/shenxu/YoutubeClip_frames/'
 resize_height = 36
 resize_width = 64
+#################################################
+#vgg_feat_name = 'fc6'
+#c3d_feat_name = 'fc6'
+#feature_folder = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/'
+#vgg_feat_folder = '/disk_2T/shenxu/msvd_feat_vgg/'
+#c3d_feat_folder = '/disk_2T/shenxu/msvd_feat_c3d/'
+#v2s_json = home_folder + 'msvd2sent.json'
+#video_frame_folder = '/disk_2T/shenxu/YoutubeClip_frames/'
+#resize_height = 36
+#resize_width = 64
+#################################################
 
 def get_cap_ids(title, wordtoix, cap_length, pad='post'):
     assert pad in ['pre', 'post']

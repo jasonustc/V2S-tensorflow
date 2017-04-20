@@ -545,9 +545,9 @@ def train():
     print "Total Time Cost:", round(tStop_total - tStart_total,2), "s"
     sess.close()
 
-def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
-    video_data_path_test='/home/shenxu/data/msvd_feat_vgg_c3d_batch/test.tfrecords',
-    n_test_samples=27020, batch_size=200):
+def test(model_path=None,
+    video_data_path_test='/home/shenxu/data/msvd_feat_vgg_c3d_frame/test.tfrecords',
+    n_test_samples=27020, batch_size=20):
 #    test_data = val_data   # to evaluate on testing data or validation data
     wordtoix = np.load(wordtoix_file).tolist()
     ixtoword = pd.Series(np.load(ixtoword_file).tolist())
@@ -565,23 +565,23 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
     # preprocess on the CPU
     with tf.device('/cpu:0'):
         train_data, train_encode_data, _, _, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
-            _, _, _, _ = read_and_decode(video_data_path_train)
+            _, _, _, _, train_frame_data = read_and_decode_with_frame(video_data_path_train)
         val_data, val_encode_data, val_fname, val_title, val_video_label, val_caption_label, val_caption_id, val_caption_id_1, \
-            _, _, _, _ = read_and_decode(video_data_path_test)
-        train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1 = \
-            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1],
+            _, _, _, _, val_frame_data = read_and_decode_with_frame(video_data_path_test)
+        train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data = \
+            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data],
                 batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
-        val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1 = \
-            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1],
+        val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_frame_data = \
+            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_frame_data],
                 batch_size=batch_size, num_threads=1, capacity=2* batch_size)
     # graph on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z, tf_v_h, tf_s_h, tf_drop_type \
-            = model.build_model(train_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
+            = model.build_model(train_data, train_frame_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
         val_v2s_tf,v2s_lstm3_vars_tf = model.build_v2s_generator(val_data)
         val_s2s_tf,s2s_lstm2_vars_tf, s2s_lstm3_vars_tf = model.build_s2s_generator(val_caption_id_1)
-        val_s2v_tf,s2v_lstm2_vars_tf, s2v_lstm4_vars_tf = model.build_s2v_generator(val_caption_id_1)
-        val_v2v_tf,v2v_lstm4_vars_tf = model.build_v2v_generator(val_data)
+        val_s2v_tf,s2v_lstm2_vars_tf, s2v_lstm4_vars_tf = model.build_s2v_generator(val_caption_id_1, val_frame_data)
+        val_v2v_tf,v2v_lstm4_vars_tf = model.build_v2v_generator(val_data, val_frame_data)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True))
 
     with tf.device(cpu_device):
@@ -598,19 +598,7 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
 #        if ind % 4 == 0:
 #                assign_op = row.assign(tf.multiply(row,1-0.5))
 #                sess.run(assign_op)
-#    for ind, row in enumerate(s2s_lstm3_vars_tf):
-#        if ind % 4 == 0:
-#                assign_op = row.assign(tf.multiply(row,1-0.5))
-#                sess.run(assign_op)
-#    for ind, row in enumerate(s2v_lstm2_vars_tf):
-#        if ind % 4 == 0:
-#                assign_op = row.assign(tf.multiply(row,1-0.5))
-#                sess.run(assign_op)
 #    for ind, row in enumerate(s2v_lstm4_vars_tf):
-#        if ind % 4 == 0:
-#                assign_op = row.assign(tf.multiply(row,1-0.5))
-#                sess.run(assign_op)
-#    for ind, row in enumerate(v2v_lstm4_vars_tf):
 #        if ind % 4 == 0:
 #                assign_op = row.assign(tf.multiply(row,1-0.5))
 #                sess.run(assign_op)
@@ -653,19 +641,26 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
 
     ######### test video generation #############
     if test_v2v:
-        mse_v2v = test_all_videos(sess, n_test_steps, val_data, val_v2v_tf, val_video_label, feat_scale_factor)
+        mse_v2v = test_all_videos(sess, n_test_steps, val_data, val_v2v_tf, val_video_label, pixel_scale_factor)
         print 'video2video mse:', mse_v2v
     if test_s2v:
-        mse_s2v = test_all_videos(sess, n_test_steps, val_data, val_s2v_tf, val_video_label, feat_scale_factor)
+        mse_s2v = test_all_videos(sess, n_test_steps, val_data, val_s2v_tf, val_video_label, pixel_scale_factor)
         print 'caption2video mse:', mse_s2v
+    if save_demo_sent_v2s:
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname, result_file='demo_v2s.txt')
+    if save_demo_sent_s2s:
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname, result_file='demo_s2s.txt')
+    if save_demo_video_v2v:
+        get_demo_video(sess, n_test_steps, val_frame_data, val_v2v_tf, val_video_label, val_fname, 'demo_v2v/', pixel_scale_factor)
+    if save_demo_video_s2v:
+        get_demo_video(sess, n_test_steps, val_frame_data, val_s2v_tf, val_video_label, val_fname, 'demo_s2v/', pixel_scale_factor)
+
     sys.stdout.flush()
     coord.request_stop()
     coord.join(threads)
     tstop = time.time()
     print "Total Time Cost:", round(tstop - tstart, 2), "s"
     sess.close()
-
-    return total_score_1, total_score_2
 
 if __name__ == '__main__':
     args = parse_args()

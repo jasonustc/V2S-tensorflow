@@ -28,9 +28,17 @@ test_v2s = True
 test_v2v = True
 test_s2s = True
 test_s2v = True
-video_data_path_train = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/train.tfrecords'
-video_data_path_val = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/val.tfrecords'
-video_data_path_test = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/test.tfrecords'
+#test_v2s = False
+#test_v2v = False
+#test_s2s = False
+#test_s2v = False
+save_demo_sent_v2s = True
+save_demo_sent_s2s = True
+save_demo_video_v2v = True
+save_demo_video_s2v = True
+#video_data_path_train = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/train.tfrecords'
+#video_data_path_val = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/val.tfrecords'
+#video_data_path_test = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/test.tfrecords'
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -529,9 +537,9 @@ def train():
     print "Total Time Cost:", round(tStop_total - tStart_total,2), "s"
     sess.close()
 
-def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
-    video_data_path_test='/home/shenxu/data/msvd_feat_vgg_c3d_batch/test.tfrecords',
-    n_test_samples=27020, batch_size=200):
+def test(model_path=None,
+    video_data_path_test='/home/shenxu/data/msvd_feat_vgg_c3d_frame/test.tfrecords',
+    n_test_samples=27020, batch_size=20):
 #    test_data = val_data   # to evaluate on testing data or validation data
     wordtoix = np.load(wordtoix_file).tolist()
     ixtoword = pd.Series(np.load(ixtoword_file).tolist())
@@ -549,9 +557,9 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
     # preprocess on the CPU
     with tf.device('/cpu:0'):
         train_data, train_encode_data, _, _, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
-            _, _, _, _, train_frame_data = read_and_decode(video_data_path_train)
+            _, _, _, _, train_frame_data = read_and_decode_with_frame(video_data_path_train)
         val_data, val_encode_data, val_fname, val_title, val_video_label, val_caption_label, val_caption_id, val_caption_id_1, \
-            _, _, _, _, val_frame_data = read_and_decode(video_data_path_test)
+            _, _, _, _, val_frame_data = read_and_decode_with_frame(video_data_path_test)
         train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data = \
             tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data],
                 batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
@@ -625,11 +633,20 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
 
     ######### test video generation #############
     if test_v2v:
-        mse_v2v = test_all_videos(sess, n_test_steps, val_data, val_v2v_tf, val_video_label, feat_scale_factor)
+        mse_v2v = test_all_videos(sess, n_test_steps, val_data, val_v2v_tf, val_video_label, pixel_scale_factor)
         print 'video2video mse:', mse_v2v
     if test_s2v:
-        mse_s2v = test_all_videos(sess, n_test_steps, val_data, val_s2v_tf, val_video_label, feat_scale_factor)
+        mse_s2v = test_all_videos(sess, n_test_steps, val_data, val_s2v_tf, val_video_label, pixel_scale_factor)
         print 'caption2video mse:', mse_s2v
+    if save_demo_sent_v2s:
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname, result_file='demo_v2s.txt')
+    if save_demo_sent_s2s:
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname, result_file='demo_s2s.txt')
+    if save_demo_video_v2v:
+        get_demo_video(sess, n_test_steps, val_frame_data, val_v2v_tf, val_video_label, val_fname, 'demo_v2v/', pixel_scale_factor)
+    if save_demo_video_s2v:
+        get_demo_video(sess, n_test_steps, val_frame_data, val_s2v_tf, val_video_label, val_fname, 'demo_s2v/', pixel_scale_factor)
+
     sys.stdout.flush()
     coord.request_stop()
     coord.join(threads)
@@ -637,11 +654,11 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
     print "Total Time Cost:", round(tstop - tstart, 2), "s"
     sess.close()
 
-    return total_score_1, total_score_2
 
 if __name__ == '__main__':
     args = parse_args()
     if args.task == 'train':
         train()
     elif args.task == 'test':
+        assert os.path.isfile(args.model + '.meta')
         total_score = test(model_path = args.model)

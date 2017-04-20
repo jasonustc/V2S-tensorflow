@@ -8,7 +8,7 @@ class COCOScorer(object):
     def __init__(self):
         print 'init COCO-EVAL scorer'
 
-    def score(self, GT, RES, IDs):
+    def score(self, GT, RES, IDs, return_img_score=False):
         self.eval = {}
         self.imgToEval = {}
         gts = {}
@@ -52,8 +52,11 @@ class COCOScorer(object):
 
         #for metric, score in self.eval.items():
         #    print '%s: %.3f'%(metric, score)
-        return self.eval
-    
+        if return_img_score:
+            return self.imgToEval
+        else:
+            return self.eval
+
     def setEval(self, score, method):
         self.eval[method] = score
 

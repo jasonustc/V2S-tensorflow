@@ -12,6 +12,7 @@ from cocoeval import COCOScorer
 import unicodedata
 import re
 from numpy import linalg as LA
+import cv2, shutil
 
 ############### Global Parameters ###############
 video_data_path_train = '/home/shenxu/data/msvd_feat_vgg_c3d_frame/train.tfrecords'
@@ -34,7 +35,8 @@ dim_hidden= 512
 n_video_steps = 45
 n_caption_steps = 35
 n_epochs = 200
-batch_size = 100
+#batch_size = 100
+batch_size = 20
 learning_rate = 0.001
 num_threads = 3
 min_queue_examples = batch_size
@@ -45,6 +47,8 @@ n_val_samples = 4149
 n_test_samples = 27020
 feat_scale_factor = 0.013
 pixel_scale_factor = 0.00392
+resize_height = 36
+resize_width = 64
 ##################################################
 
 ######### general operations #####################
@@ -258,6 +262,24 @@ def testing_all(sess, n_steps, ixtoword, caption_tf, name_tf):
 
     return pred_sent, gt_sent, new_IDs_list, gt_dict, pred_dict, new_flist
 
+def get_demo_sentence(sess, n_steps, ixtoword, caption_tf, name_tf, result_file):
+    [pred_sent, gt_sent, id_list, gt_dict, pred_dict, fname_list] = testing_all(sess, n_steps, ixtoword, caption_tf, name_tf)
+    scorer = COCOScorer()
+    scores = scorer.score(gt_dict, pred_dict, id_list, return_img_score=True)
+    bleus = []
+    for i, idx in enumerate(id_list):
+        bleus.append((scores[idx]['Bleu_4'], fname_list[i], idx))
+    sorted_bleus = sorted(bleus, key=lambda x: x[0], reverse=True)
+    with open(result_file, 'w') as result:
+        for i in xrange(2):
+            fname = sorted_bleus[i][1]
+            idx = sorted_bleus[i][2]
+            result.write(fname + '\n')
+            for ele in gt_dict[idx]:
+                result.write('GT: ' + ele['caption'] + '\n')
+            result.write('PD: ' + pred_dict[idx][0]['caption'] + '\n\n\n')
+        print 'result saved to', result_file
+
 def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, scale=None):
     avg_loss = 0.
     for ind in xrange(n_steps):
@@ -273,7 +295,17 @@ def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, sc
         avg_loss += loss / np.sum(video_label)
     return avg_loss / n_steps
 
-def get_demo_video(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, video_name_tf, scale=None):
+def save_video_images(folder, pd_images, gt_images, video_label):
+    for i in xrange(video_label.shape[0]):
+        if video_label[i] == 1:
+            cv2.imwrite(folder + '/pd_'+str(i)+'.jpg', np.reshape(pd_images[i]*255, (resize_height, resize_width, 3)))
+            cv2.imwrite(folder + '/gt_'+str(i)+'.jpg', np.reshape(gt_images[i]*255, (resize_height, resize_width, 3)))
+    print 'saved images to folder:', folder
+
+def get_demo_video(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, video_name_tf, save_folder, scale=None):
+    if os.path.isdir(save_folder):
+        shutil.rmtree(save_folder)
+    os.mkdir(save_folder)
     demo_video = {}
     min_loss = 10000.
     for i in xrange(n_steps):
@@ -293,10 +325,12 @@ def get_demo_video(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, vid
             demo_video['name'] = video_name.values[ind]
             demo_video['pd_images'] = pd_images[ind, :, :]
             demo_video['gt_images'] = gt_images[ind, :, :]
-            demo_video['video_label'] = video_label[ind, :]
+            demo_video['video_label'] = video_label[ind, 1:]
             demo_video['loss'] = avg_loss[ind]
             min_loss = avg_loss[ind]
+            os.mkdir(save_folder + demo_video['name'])
             print 'min_loss of batch', i, ':', avg_loss[ind]
+            save_video_images(save_folder + demo_video['name'], demo_video['pd_images'], demo_video['gt_images'], demo_video['video_label'])
     return demo_video
 
 ######## testing related functions ###########o####
