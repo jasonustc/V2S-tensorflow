@@ -19,7 +19,9 @@ import random
 #### custom parameters #####
 model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_frame_center/'
 learning_rate = 0.001
+# ['block_video', 'block_sent', 'random', 'keep']
 drop_strategy = 'random'
+loss_strategy = 'random'
 caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01
@@ -73,6 +75,7 @@ class Video_Caption_Generator():
 
     def build_model(self, video_feat, frames, video_mask, caption, caption_1, caption_mask):
         drop_type = tf.placeholder(tf.int32, shape=[])
+        loss_type = tf.placeholder(tf.int32, shape=[])
         caption_mask = tf.cast(caption_mask, tf.float32)
         video_mask = tf.cast(video_mask, tf.float32)
         # for decoding
@@ -101,11 +104,15 @@ class Video_Caption_Generator():
         #### 0: keep both 1: keep video only 2: keep sentence only
         ######## Dropout Stage #########
         if drop_type == 1:
-            output2 = tf.constant(0, dtype=tf.float32) * output2
+            output2 = tf.constant(0.) * output2
             output2 = tf.stop_gradient(output2)
         elif drop_type == 2:
-            output1 = tf.constant(0, dtype=tf.float32) * output1
+            output1 = tf.constant(0.) * output1
             output1 = tf.stop_gradient(output1)
+        if loss_type == 1:
+            caption_weight = 0.
+        elif loss_type == 2:
+            video_weight = 0.
         ######## Dropout Stage #########
 
         ######## Semantic Learning Stage ########
@@ -163,7 +170,7 @@ class Video_Caption_Generator():
 
         loss = tf.constant(caption_weight) * loss_caption + tf.constant(video_weight) * loss_video + \
             tf.constant(latent_weight) * loss_latent
-        return loss, loss_caption, loss_latent, loss_video, output_semantic, output1, output2, drop_type
+        return loss, loss_caption, loss_latent, loss_video, output_semantic, output1, output2, drop_type, loss_type
 
 
     def build_v2s_generator(self, video_feat):
@@ -370,7 +377,7 @@ def train():
                 batch_size=batch_size, num_threads=1, capacity=2* batch_size)
     # graph on the GPU
     with tf.device("/gpu:0"):
-        tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z, tf_v_h, tf_s_h, tf_drop_type \
+        tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z, tf_v_h, tf_s_h, tf_drop_type, tf_loss_type \
             = model.build_model(train_data, train_frame_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
         val_v2s_tf,_ = model.build_v2s_generator(val_data)
         val_s2s_tf,_,_ = model.build_s2s_generator(val_caption_id_1)
@@ -444,11 +451,20 @@ def train():
             drop_type = 2
         else:
             drop_type = random.randint(0, 3)
+        if loss_strategy == 'keep':
+            loss_type = 0
+        elif loss_strategy == 'block_sentence':
+            loss_type = 1
+        elif loss_strategy == 'block_video':
+            loss_type = 2
+        else:
+            loss_type = random.randint(0, 3)
 
         _, loss_val, loss_cap, loss_lat, loss_vid = sess.run(
                 [train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid],
                 feed_dict={
-                    tf_drop_type: drop_type
+                    tf_drop_type: drop_type,
+                    tf_loss_type: loss_type
                     })
         tStop = time.time()
         print "step:", step, " Loss:", loss_val, "loss_cap:", loss_cap*caption_weight, "loss_latent:", loss_lat*latent_weight, "loss_vid:", loss_vid * video_weight
@@ -549,23 +565,23 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
     # preprocess on the CPU
     with tf.device('/cpu:0'):
         train_data, train_encode_data, _, _, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
-            _, _, _, _, train_frame_data = read_and_decode(video_data_path_train)
+            _, _, _, _ = read_and_decode(video_data_path_train)
         val_data, val_encode_data, val_fname, val_title, val_video_label, val_caption_label, val_caption_id, val_caption_id_1, \
-            _, _, _, _, val_frame_data = read_and_decode(video_data_path_test)
-        train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data = \
-            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data],
+            _, _, _, _ = read_and_decode(video_data_path_test)
+        train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1 = \
+            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1],
                 batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
-        val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_frame_data = \
-            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_frame_data],
+        val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1 = \
+            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1],
                 batch_size=batch_size, num_threads=1, capacity=2* batch_size)
     # graph on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z, tf_v_h, tf_s_h, tf_drop_type \
-            = model.build_model(train_data, train_frame_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
+            = model.build_model(train_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
         val_v2s_tf,v2s_lstm3_vars_tf = model.build_v2s_generator(val_data)
         val_s2s_tf,s2s_lstm2_vars_tf, s2s_lstm3_vars_tf = model.build_s2s_generator(val_caption_id_1)
-        val_s2v_tf,s2v_lstm2_vars_tf, s2v_lstm4_vars_tf = model.build_s2v_generator(val_caption_id_1, val_frame_data)
-        val_v2v_tf,v2v_lstm4_vars_tf = model.build_v2v_generator(val_data, val_frame_data)
+        val_s2v_tf,s2v_lstm2_vars_tf, s2v_lstm4_vars_tf = model.build_s2v_generator(val_caption_id_1)
+        val_v2v_tf,v2v_lstm4_vars_tf = model.build_v2v_generator(val_data)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True))
 
     with tf.device(cpu_device):
@@ -582,7 +598,19 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
 #        if ind % 4 == 0:
 #                assign_op = row.assign(tf.multiply(row,1-0.5))
 #                sess.run(assign_op)
+#    for ind, row in enumerate(s2s_lstm3_vars_tf):
+#        if ind % 4 == 0:
+#                assign_op = row.assign(tf.multiply(row,1-0.5))
+#                sess.run(assign_op)
+#    for ind, row in enumerate(s2v_lstm2_vars_tf):
+#        if ind % 4 == 0:
+#                assign_op = row.assign(tf.multiply(row,1-0.5))
+#                sess.run(assign_op)
 #    for ind, row in enumerate(s2v_lstm4_vars_tf):
+#        if ind % 4 == 0:
+#                assign_op = row.assign(tf.multiply(row,1-0.5))
+#                sess.run(assign_op)
+#    for ind, row in enumerate(v2v_lstm4_vars_tf):
 #        if ind % 4 == 0:
 #                assign_op = row.assign(tf.multiply(row,1-0.5))
 #                sess.run(assign_op)
