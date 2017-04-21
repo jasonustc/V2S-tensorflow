@@ -14,7 +14,7 @@ from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoi
 from modules.variational_autoencoder import VAE
 from utils.model_ops import *
 from utils.record_helper import read_and_decode
-import random
+import random, pickle
 
 #### custom parameters #####
 model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_by_max/'
@@ -24,10 +24,19 @@ caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01
 cpu_device = "/cpu:0"
-test_v2s = True
-test_v2v = True
-test_s2s = True
-test_s2v = True
+#test_v2s = True
+#test_v2v = True
+#test_s2s = True
+#test_s2v = True
+test_v2s = False
+test_v2v = False
+test_s2s = False
+test_s2v = False
+save_demo_sent_s2s = False
+save_demo_sent_v2s = True
+save_demo_video_s2v = False
+save_demo_video_v2v = False
+dim_image = 2 * 4096
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -543,9 +552,10 @@ def train():
     print "Total Time Cost:", round(tStop_total - tStart_total,2), "s"
     sess.close()
 
-def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
-    video_data_path_test='/home/shenxu/data/msvd_feat_vgg_c3d_batch/test.tfrecords',
-    n_test_samples=27020, batch_size=200):
+def test(model_path=None,
+    video_data_path_test=video_data_path_val,
+    n_test_samples=n_val_samples,
+    video_name=None):
 #    test_data = val_data   # to evaluate on testing data or validation data
     wordtoix = np.load(wordtoix_file).tolist()
     ixtoword = pd.Series(np.load(ixtoword_file).tolist())
@@ -622,29 +632,49 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
     tstart = time.time()
     ### TODO: sometimes COCO test show exceptions in the beginning of training ####
     if test_v2s:
-        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
-        for i, key in enumerate(pred_dict.keys()):
-            print 'video:', flist[i]
-            for ele in gt_dict[key]:
-                print "GT:  " + ele['caption']
-            print "PD:  " + pred_dict[key][0]['caption']
-            print '-------'
+#        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
+#        for i, key in enumerate(pred_dict.keys()):
+#            print 'video:', flist[i]
+#            for ele in gt_dict[key]:
+#                print "GT:  " + ele['caption']
+#            print "PD:  " + pred_dict[key][0]['caption']
+#            print '-------'
         print '############## video to sentence result #################'
-        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname)
+        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname)
+        if os.path.isfile('demo_v2s.txt.videos'):
+            video_name = pickle.load(open('demo_v2s.txt.videos', "rb"))
+        if video_name:
+            for i, key in enumerate(pred_dict.keys()):
+                if flist[i] in video_name:
+                    print flist[i]
+                    for ele in gt_dict[key]:
+                        print "GT:  " + ele['caption']
+                    print "PD:  " + pred_dict[key][0]['caption']
+                    print '-----------'
         scorer  = COCOScorer()
         total_score_1 = scorer.score(gt_dict, pred_dict, id_list)
         print '############## video to sentence result #################'
 
     if test_s2s:
-        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
-        for i, key in enumerate(pred_dict.keys()):
-            print 'video:', flist[i]
-            for ele in gt_dict[key]:
-                print "GT:  " + ele['caption']
-            print "PD:  " + pred_dict[key][0]['caption']
-            print '-------'
+#        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
+#        for i, key in enumerate(pred_dict.keys()):
+#            print 'video:', flist[i]
+#            for ele in gt_dict[key]:
+#                print "GT:  " + ele['caption']
+#            print "PD:  " + pred_dict[key][0]['caption']
+#            print '-------'
         print '############## sentence to sentence result #################'
-        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname)
+        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname)
+        if os.path.isfile('demo_s2s.txt.videos'):
+            video_name = pickle.load(open('demo_s2s.txt.videos', "rb"))
+        if video_name:
+            for i, key in enumerate(pred_dict.keys()):
+                if flist[i] in video_name:
+                    print flist[i]
+                    for ele in gt_dict[key]:
+                        print "GT:  " + ele['caption']
+                    print "PD:  " + pred_dict[key][0]['caption']
+                    print '-----------'
         scorer = COCOScorer()
         total_score_2 = scorer.score(gt_dict, pred_dict, id_list)
         print '############## sentence to sentence result #################'
@@ -656,14 +686,20 @@ def test(model_path=home_folder + 'models/random_scale_by_max/model-19',
     if test_s2v:
         mse_s2v = test_all_videos(sess, n_test_steps, val_data, val_s2v_tf, val_video_label, feat_scale_factor)
         print 'caption2video mse:', mse_s2v
+    if save_demo_sent_v2s:
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname, result_file='demo_v2s.txt')
+    if save_demo_sent_s2s:
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname, result_file='demo_s2s.txt')
+    if save_demo_video_v2v:
+        get_demo_video(sess, n_test_steps, val_frame_data, val_v2v_tf, val_video_label, val_fname, 'demo_v2v/', pixel_scale_factor)
+    if save_demo_video_s2v:
+        get_demo_video(sess, n_test_steps, val_frame_data, val_s2v_tf, val_video_label, val_fname, 'demo_s2v/', pixel_scale_factor)
     sys.stdout.flush()
     coord.request_stop()
     coord.join(threads)
     tstop = time.time()
     print "Total Time Cost:", round(tstop - tstart, 2), "s"
     sess.close()
-
-    return total_score_1, total_score_2
 
 if __name__ == '__main__':
     args = parse_args()

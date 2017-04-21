@@ -12,7 +12,7 @@ from cocoeval import COCOScorer
 import unicodedata
 import re
 from numpy import linalg as LA
-import cv2, shutil
+import cv2, shutil, pickle
 
 ############### Global Parameters ###############
 video_data_path_train = '/home/shenxu/data/msvd_feat_vgg_c3d_frame/train.tfrecords'
@@ -269,15 +269,20 @@ def get_demo_sentence(sess, n_steps, ixtoword, caption_tf, name_tf, result_file)
     for i, idx in enumerate(id_list):
         bleus.append((scores[idx]['Bleu_4'], fname_list[i], idx))
     sorted_bleus = sorted(bleus, key=lambda x: x[0], reverse=True)
+    video_names = []
     with open(result_file, 'w') as result:
-        for i in xrange(2):
+        for i in xrange(40):
             fname = sorted_bleus[i][1]
+            video_names.append(fname)
             idx = sorted_bleus[i][2]
             result.write(fname + '\n')
             for ele in gt_dict[idx]:
                 result.write('GT: ' + ele['caption'] + '\n')
             result.write('PD: ' + pred_dict[idx][0]['caption'] + '\n\n\n')
         print 'result saved to', result_file
+    with open(result_file + '.videos', "wb") as fp:
+        pickle.dump(video_names, fp)
+        print 'video names saved to', result_file + '.videos'
 
 def test_all_videos(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, scale=None):
     avg_loss = 0.
@@ -320,13 +325,16 @@ def get_demo_video(sess, n_steps, gt_video_tf, gen_video_tf, video_label_tf, vid
         label_sum = np.sum(video_label, axis=1)
         avg_loss = loss / label_sum
         ind = np.argmin(avg_loss)
-        if avg_loss[ind] < min_loss:
+#        if avg_loss[ind] < min_loss:
+        if True:
             demo_video['name'] = video_name.values[ind]
             demo_video['pd_images'] = pd_images[ind, :, :]
             demo_video['gt_images'] = gt_images[ind, :, :]
             demo_video['video_label'] = video_label[ind, 1:]
             demo_video['loss'] = avg_loss[ind]
             min_loss = avg_loss[ind]
+            if os.path.isdir(save_folder + demo_video['name']):
+                shutil.rmtree(save_folder + demo_video['name'])
             os.mkdir(save_folder + demo_video['name'])
             print 'min_loss of batch', i, ':', avg_loss[ind]
             save_video_images(save_folder + demo_video['name'], demo_video['pd_images'], demo_video['gt_images'], demo_video['video_label'])

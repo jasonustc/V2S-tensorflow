@@ -18,10 +18,15 @@ from utils.record_helper import read_and_decode
 model_path = '/home/shenxu/V2S-tensorflow/models/s2s/'
 learning_rate = 0.0001
 cpu_device = '/cpu:1'
-video_data_path_train = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/train.tfrecords'
-video_data_path_val = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/val.tfrecords'
-video_data_path_test = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/test.tfrecords'
 dim_image = 2*4096
+test_v2s = False
+test_v2v = False
+test_s2s = True
+test_s2v = False
+save_demo_sent_s2s = False
+save_demo_sent_v2s = False
+save_demo_video_s2v = False
+save_demo_video_v2v = False
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -102,7 +107,7 @@ class Video_Caption_Generator():
         loss = loss_caption / tf.reduce_sum(caption_mask)
         return loss
 
-    def build_sent_generator(self, caption_1):
+    def build_s2s_generator(self, caption_1):
         ####### Encoding Video ##########
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
@@ -259,37 +264,88 @@ def train():
     print "Total Time Cost:", round(tStop_total - tStart_total,2), "s"
     sess.close()
 
-def test(model_path='models/model-900', video_feat_path=video_feat_path):
-    meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
+def test(model_path=None,
+    video_data_path_test=video_data_path_val,
+    n_test_samples=n_val_samples,
+    video_name=None):
 #    test_data = val_data   # to evaluate on testing data or validation data
-    ixtoword = pd.Series(np.load('./data0/msvd_ixtoword.npy').tolist())
+    wordtoix = np.load(wordtoix_file).tolist()
+    ixtoword = pd.Series(np.load(ixtoword_file).tolist())
+    with tf.device("/gpu:0"):
+        model = Video_Caption_Generator(
+                dim_image=dim_image,
+                n_words=len(wordtoix),
+                dim_hidden=dim_hidden,
+                batch_size=batch_size,
+                n_caption_steps=n_caption_steps,
+                n_video_steps=n_video_steps,
+                drop_out_rate = 0.5,
+                bias_init_vector=None)
 
-    model = Video_Caption_Generator(
-            dim_image=dim_image,
-            n_words=len(ixtoword),
-            dim_hidden=dim_hidden,
-            batch_size=batch_size,
-            n_lstm_steps=n_frame_step,
-            drop_out_rate = 0,
-            bias_init_vector=None)
-
-    video_tf, video_mask_tf, caption_tf, lstm3_variables_tf = model.build_generator()
+    # preprocess on the CPU
+    with tf.device('/cpu:0'):
+        train_data, train_encode_data, _, _, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
+            _, _, _, _ = read_and_decode(video_data_path_train)
+        val_data, val_encode_data, val_fname, val_title, val_video_label, val_caption_label, val_caption_id, val_caption_id_1, \
+            _, _, _, _ = read_and_decode(video_data_path_test)
+        train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1 = \
+            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1],
+                batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
+        val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1 = \
+            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1],
+                batch_size=batch_size, num_threads=1, capacity=2* batch_size)
+    # graph on the GPU
+    with tf.device("/gpu:0"):
+        tf_loss = model.build_model(train_caption_id, train_caption_id_1, train_caption_label)
+        val_s2s_tf, s2s_lstm3_vars_tf = model.build_s2s_generator(val_caption_id_1)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True))
 
     with tf.device(cpu_device):
         saver = tf.train.Saver()
         saver.restore(sess, model_path)
+        print 'load parameters from:', model_path
 
-    for ind, row in enumerate(lstm3_variables_tf):
-        if ind % 4 == 0:
-                assign_op = row.assign(tf.multiply(row,1-0.5))
-                sess.run(assign_op)
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    ######### test sentence generation ##########
+    print 'testing...'
+    n_test_steps = int(n_test_samples / batch_size)
+    print 'n_test_steps:', n_test_steps
+    tstart = time.time()
+    ### TODO: sometimes COCO test show exceptions in the beginning of training ####
+    if test_s2s:
+#        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
+#        for i, key in enumerate(pred_dict.keys()):
+#            print 'video:', flist[i]
+#            for ele in gt_dict[key]:
+#                print "GT:  " + ele['caption']
+#            print "PD:  " + pred_dict[key][0]['caption']
+#            print '-------'
+        print '############## sentence to sentence result #################'
+        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname)
+        if os.path.isfile('demo_s2s.txt.videos'):
+            video_name = pickle.load(open('demo_s2s.txt.videos', "rb"))
+        if video_name:
+            for i, key in enumerate(pred_dict.keys()):
+                if flist[i] in video_name:
+                    print flist[i]
+                    for ele in gt_dict[key]:
+                        print "GT:  " + ele['caption']
+                    print "PD:  " + pred_dict[key][0]['caption']
+                    print '-----------'
+        scorer = COCOScorer()
+        total_score_2 = scorer.score(gt_dict, pred_dict, id_list)
+        print '############## sentence to sentence result #################'
 
-    [pred_sent, gt_sent, id_list, gt_dict, pred_dict] = testing_all(sess, test_data, ixtoword,video_tf, video_mask_tf, caption_tf)
-    #np.savez('Att_result/'+model_path.split('/')[1],gt = gt_sent,pred=pred_sent)
-    scorer = COCOScorer()
-    total_score = scorer.score(gt_dict, pred_dict, id_list)
-    return total_score
+    if save_demo_sent_s2s:
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname, result_file='demo_s2s.txt')
+
+    sys.stdout.flush()
+    coord.request_stop()
+    coord.join(threads)
+    tstop = time.time()
+    print "Total Time Cost:", round(tstop - tstart, 2), "s"
+    sess.close()
 
 if __name__ == '__main__':
     args = parse_args()

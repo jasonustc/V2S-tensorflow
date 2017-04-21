@@ -17,12 +17,12 @@ from utils.record_helper import read_and_decode_with_frame
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_frame_center/'
-learning_rate = 0.001
-drop_strategy = 'random'
-caption_weight = 1.
+model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_frame/'
+learning_rate = 0.0001
+drop_strategy = 'block_video'
+caption_weight = 0.
 video_weight = 1.
-latent_weight = 0.01
+latent_weight = 0.001
 cpu_device = "/cpu:1"
 #test_v2s = True
 #test_v2v = True
@@ -32,8 +32,8 @@ test_v2s = False
 test_v2v = False
 test_s2s = False
 test_s2v = False
-save_demo_sent_v2s = True
-save_demo_sent_s2s = True
+save_demo_sent_v2s = False
+save_demo_sent_s2s = False
 save_demo_video_v2v = True
 save_demo_video_s2v = True
 video_data_path_train = '/data10/shenxu/msvd_feat_vgg_c3d_frame/train.tfrecords'
@@ -538,8 +538,8 @@ def train():
     sess.close()
 
 def test(model_path=None,
-    video_data_path_test='/home/shenxu/data/msvd_feat_vgg_c3d_frame/test.tfrecords',
-    n_test_samples=27020):
+    video_data_path_test=video_data_path_val,
+    n_test_samples=n_val_samples):
 #    test_data = val_data   # to evaluate on testing data or validation data
     wordtoix = np.load(wordtoix_file).tolist()
     ixtoword = pd.Series(np.load(ixtoword_file).tolist())
@@ -633,10 +633,10 @@ def test(model_path=None,
 
     ######### test video generation #############
     if test_v2v:
-        mse_v2v = test_all_videos(sess, n_test_steps, val_data, val_v2v_tf, val_video_label, pixel_scale_factor)
+        mse_v2v = test_all_videos(sess, n_test_steps, val_frame_data, val_v2v_tf, val_video_label, pixel_scale_factor)
         print 'video2video mse:', mse_v2v
     if test_s2v:
-        mse_s2v = test_all_videos(sess, n_test_steps, val_data, val_s2v_tf, val_video_label, pixel_scale_factor)
+        mse_s2v = test_all_videos(sess, n_test_steps, val_frame_data, val_s2v_tf, val_video_label, pixel_scale_factor)
         print 'caption2video mse:', mse_s2v
     if save_demo_sent_v2s:
         get_demo_sentence(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname, result_file='demo_v2s.txt')
