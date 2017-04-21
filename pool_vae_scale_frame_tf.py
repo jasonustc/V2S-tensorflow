@@ -17,28 +17,28 @@ from utils.record_helper import read_and_decode_with_frame
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_frame_center/'
+model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_frame_tf/'
 learning_rate = 0.001
 drop_strategy = 'random'
 caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01
 cpu_device = "/cpu:1"
-#test_v2s = True
-#test_v2v = True
-#test_s2s = True
-#test_s2v = True
-test_v2s = False
-test_v2v = False
-test_s2s = False
-test_s2v = False
+test_v2s = True
+test_v2v = True
+test_s2s = True
+test_s2v = True
+#test_v2s = False
+#test_v2v = False
+#test_s2s = False
+#test_s2v = False
 save_demo_sent_v2s = True
 save_demo_sent_s2s = True
 save_demo_video_v2v = True
 save_demo_video_s2v = True
-#video_data_path_train = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/train.tfrecords'
-#video_data_path_val = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/val.tfrecords'
-#video_data_path_test = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/test.tfrecords'
+#video_data_path_train = '/data10/shenxu/msvd_feat_vgg_c3d_frame/train.tfrecords'
+#video_data_path_val = '/data10/shenxu/msvd_feat_vgg_c3d_frame/val.tfrecords'
+#video_data_path_test = '/data10/shenxu/msvd_feat_vgg_c3d_frame/test.tfrecords'
 #### custom parameters #####
 
 class Video_Caption_Generator():
@@ -55,14 +55,11 @@ class Video_Caption_Generator():
         with tf.device(cpu_device):
             self.Wemb = tf.Variable(tf.random_uniform([n_words, dim_hidden], -0.1, 0.1), name='Wemb')
 
-        # encoding LSTM for sentence
-        self.lstm2 = tf.contrib.rnn.LSTMCell(self.dim_hidden, use_peepholes=True, state_is_tuple=True)
         # decoding LSTM for sentence
         self.lstm3 = tf.contrib.rnn.LSTMCell(self.dim_hidden, use_peepholes=True, state_is_tuple=True)
         # decoding LSTM for video
         self.lstm4 = tf.contrib.rnn.LSTMCell(self.dim_hidden, use_peepholes=True, state_is_tuple=True)
 
-        self.lstm2_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm2,output_keep_prob=1 - self.drop_out_rate)
         self.lstm3_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm3,output_keep_prob=1 - self.drop_out_rate)
         self.lstm4_dropout = tf.contrib.rnn.DropoutWrapper(self.lstm4,output_keep_prob=1 - self.drop_out_rate)
 
@@ -78,6 +75,7 @@ class Video_Caption_Generator():
             self.embed_word_b = tf.Variable(bias_init_vector.astype(np.float32), name='embed_word_b')
         else:
             self.embed_word_b = tf.Variable(tf.zeros([n_words]), name='embed_word_b')
+        self.loc_matrix = tf.Variable(np.identity(n_words), dtype=tf.float32, name='loc_matrix')
 
     def build_model(self, video_feat, frames, video_mask, caption, caption_1, caption_mask):
         drop_type = tf.placeholder(tf.int32, shape=[])
@@ -96,14 +94,13 @@ class Video_Caption_Generator():
         # mean pooling && mapping into (-1, 1) range
         video_mean = tf.reduce_mean(video_feat, axis=1)
         output1 = tf.nn.tanh(tf.nn.xw_plus_b(video_mean, self.encode_image_W, self.encode_image_b)) # b x h
-        # encoding sentence
-        with tf.variable_scope("model") as scope:
-            for i in xrange(self.n_caption_steps):
-                if i > 0: scope.reuse_variables()
-                with tf.variable_scope("LSTM2"):
-                    with tf.device(cpu_device):
-                        current_embed = tf.nn.embedding_lookup(self.Wemb, caption_1[:,i]) # b x h
-                    output2, state2 = self.lstm2_dropout(current_embed, state2) # b x h
+        word_vec = []
+        for i in xrange(self.n_caption_steps):
+            with tf.device(cpu_device):
+                current_loc = tf.nn.embedding_lookup(self.loc_matrix, caption_1[:,i]) # b x n_words
+        sent_feat = tf.reduce_sum(tf.stack(word_vec), axis=0) # b x n_words
+        output2 = tf.nn.tanh(tf.matmul(sent_feat, self.sent_emb)) # b x h
+        tf.summary.histogram('output_2', output2)
         ######## Encoding Stage #########
 
         #### 0: keep both 1: keep video only 2: keep sentence only
@@ -216,18 +213,14 @@ class Video_Caption_Generator():
     def build_s2s_generator(self, caption_1):
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        state2 = (c_init, m_init) # 2 x b x h
 
         ######## Encoding Stage #########
-        # encoding sentence
-        with tf.variable_scope("model") as scope:
-            scope.reuse_variables()
-            for i in xrange(self.n_caption_steps):
-                with tf.variable_scope("LSTM2") as vs:
-                    with tf.device(cpu_device):
-                        current_embed = tf.nn.embedding_lookup(self.Wemb, caption_1[:,i]) # b x h
-                    output2, state2 = self.lstm2_dropout(current_embed, state2) # b x h
-                    lstm2_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
+        word_vec = []
+        for i in xrange(self.n_caption_steps):
+            with tf.device(cpu_device):
+                current_loc = tf.nn.embedding_lookup(self.loc_matrix, caption_1[:,i]) # b x n_words
+        sent_feat = tf.reduce_sum(tf.stack(word_vec), axis=0) # b x n_words
+        output2 = tf.nn.tanh(tf.matmul(sent_feat, self.sent_emb)) # b x h
         ######## Encoding Stage #########
 
         ####### Semantic Mapping ########
@@ -256,22 +249,19 @@ class Video_Caption_Generator():
         ####### Decoding ########
 
         generated_words = tf.transpose(tf.stack(generated_words)) # n_caption_step x 1
-        return generated_words, lstm2_variables, lstm3_variables
+        return generated_words, lstm3_variables
 
     def build_s2v_generator(self, sent, frames):
         frames = frames * tf.constant(pixel_scale_factor)
         ####### Encoding Sentence ##########
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        state2 = (c_init, m_init)
-        with tf.variable_scope("model") as scope:
-            for i in xrange(self.n_caption_steps):
-                scope.reuse_variables()
-                with tf.variable_scope("LSTM2") as vs:
-                    with tf.device(cpu_device):
-                        current_embed = tf.nn.embedding_lookup(self.Wemb, sent[:, i])
-                    output2, state2 = self.lstm2_dropout(current_embed, state2) # b x h
-                    lstm2_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
+        word_vec = []
+        for i in xrange(self.n_caption_steps):
+            with tf.device(cpu_device):
+                current_loc = tf.nn.embedding_lookup(self.loc_matrix, caption_1[:,i]) # b x n_words
+        sent_feat = tf.reduce_sum(tf.stack(word_vec), axis=0) # b x n_words
+        output2 = tf.nn.tanh(tf.matmul(sent_feat, self.sent_emb)) # b x h
         ####### Encoding Sentence ##########
 
         ####### Semantic Mapping ########
@@ -298,7 +288,7 @@ class Video_Caption_Generator():
         ####### Decoding ########
         generated_images = tf.transpose(tf.stack(generated_images), [1, 0, 2]) # b x n_video_step x d_im
 
-        return generated_images, lstm2_variables, lstm4_variables
+        return generated_images, lstm4_variables
 
     def build_v2v_generator(self, video_feat, frames):
         video_feat = video_feat * tf.constant(feat_scale_factor)
@@ -483,34 +473,40 @@ def train():
 #            n_val_steps = 3
             ### TODO: sometimes COCO test show exceptions in the beginning of training ####
             if test_v2s:
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
-                for i, key in enumerate(pred_dict.keys()):
-                    print 'video:', flist[i]
-                    for ele in gt_dict[key]:
-                        print "GT:  " + ele['caption']
-                    print "PD:  " + pred_dict[key][0]['caption']
-                    print '-------'
-                print '############## video to sentence result #################'
-                print 'epoch:', epoch
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_val_steps, ixtoword, val_v2s_tf, val_fname)
-                scorer = COCOScorer()
-                total_score = scorer.score(gt_dict, pred_dict, id_list)
-                print '############## video to sentence result #################'
+                try:
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
+                    for i, key in enumerate(pred_dict.keys()):
+                        print 'video:', flist[i]
+                        for ele in gt_dict[key]:
+                            print "GT:  " + ele['caption']
+                        print "PD:  " + pred_dict[key][0]['caption']
+                        print '-------'
+                    print '############## video to sentence result #################'
+                    print 'epoch:', epoch
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_val_steps, ixtoword, val_v2s_tf, val_fname)
+                    scorer = COCOScorer()
+                    total_score = scorer.score(gt_dict, pred_dict, id_list)
+                    print '############## video to sentence result #################'
+                except Exception, e:
+                    print 'epoch', epoch, 'v2s bleu test exception'
 
             if test_s2s:
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
-                for i,key in enumerate(pred_dict.keys()):
-                    print 'video:', flist[i]
-                    for ele in gt_dict[key]:
-                        print "GT:  " + ele['caption']
-                    print "PD:  " + pred_dict[key][0]['caption']
-                    print '-------'
-                print '############## sentence to sentence result #################'
-                print 'epoch:', epoch
-                [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_val_steps, ixtoword, val_s2s_tf, val_fname)
-                scorer = COCOScorer()
-                total_score = scorer.score(gt_dict, pred_dict, id_list)
-                print '############## sentence to sentence result #################'
+                try:
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
+                    for i,key in enumerate(pred_dict.keys()):
+                        print 'video:', flist[i]
+                        for ele in gt_dict[key]:
+                            print "GT:  " + ele['caption']
+                        print "PD:  " + pred_dict[key][0]['caption']
+                        print '-------'
+                    print '############## sentence to sentence result #################'
+                    print 'epoch:', epoch
+                    [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_val_steps, ixtoword, val_s2s_tf, val_fname)
+                    scorer = COCOScorer()
+                    total_score = scorer.score(gt_dict, pred_dict, id_list)
+                    print '############## sentence to sentence result #################'
+                except Exception, e:
+                    print 'epoch', epoch, 's2s bleu test exception'
 
             ######### test video generation #############
             if test_v2v:
@@ -571,9 +567,9 @@ def test(model_path=None,
         tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z, tf_v_h, tf_s_h, tf_drop_type \
             = model.build_model(train_data, train_frame_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
         val_v2s_tf,v2s_lstm3_vars_tf = model.build_v2s_generator(val_data)
-        val_s2s_tf,s2s_lstm2_vars_tf, s2s_lstm3_vars_tf = model.build_s2s_generator(val_caption_id_1)
-        val_s2v_tf,s2v_lstm2_vars_tf, s2v_lstm4_vars_tf = model.build_s2v_generator(val_caption_id_1, val_frame_data)
-        val_v2v_tf,v2v_lstm4_vars_tf = model.build_v2v_generator(val_data, val_frame_data)
+        val_s2s_tf, s2s_lstm3_vars_tf = model.build_s2s_generator(val_caption_id_1)
+        val_s2v_tf, s2v_lstm4_vars_tf = model.build_s2v_generator(val_caption_id_1, val_frame_data)
+        val_v2v_tf, v2v_lstm4_vars_tf = model.build_v2v_generator(val_data, val_frame_data)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True))
 
     with tf.device(cpu_device):
@@ -604,32 +600,38 @@ def test(model_path=None,
     tstart = time.time()
     ### TODO: sometimes COCO test show exceptions in the beginning of training ####
     if test_v2s:
-        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
-        for i, key in enumerate(pred_dict.keys()):
-            print 'video:', flist[i]
-            for ele in gt_dict[key]:
-                print "GT:  " + ele['caption']
-            print "PD:  " + pred_dict[key][0]['caption']
-            print '-------'
-        print '############## video to sentence result #################'
-        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname)
-        scorer  = COCOScorer()
-        total_score_1 = scorer.score(gt_dict, pred_dict, id_list)
-        print '############## video to sentence result #################'
+        try:
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
+            for i, key in enumerate(pred_dict.keys()):
+                print 'video:', flist[i]
+                for ele in gt_dict[key]:
+                    print "GT:  " + ele['caption']
+                print "PD:  " + pred_dict[key][0]['caption']
+                print '-------'
+            print '############## video to sentence result #################'
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname)
+            scorer  = COCOScorer()
+            total_score_1 = scorer.score(gt_dict, pred_dict, id_list)
+            print '############## video to sentence result #################'
+        except Exception, e:
+            print 'v2s bleu test exception'
 
     if test_s2s:
-        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
-        for i, key in enumerate(pred_dict.keys()):
-            print 'video:', flist[i]
-            for ele in gt_dict[key]:
-                print "GT:  " + ele['caption']
-            print "PD:  " + pred_dict[key][0]['caption']
-            print '-------'
-        print '############## sentence to sentence result #################'
-        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname)
-        scorer = COCOScorer()
-        total_score_2 = scorer.score(gt_dict, pred_dict, id_list)
-        print '############## sentence to sentence result #################'
+        try:
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
+            for i, key in enumerate(pred_dict.keys()):
+                print 'video:', flist[i]
+                for ele in gt_dict[key]:
+                    print "GT:  " + ele['caption']
+                print "PD:  " + pred_dict[key][0]['caption']
+                print '-------'
+            print '############## sentence to sentence result #################'
+            [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname)
+            scorer = COCOScorer()
+            total_score_2 = scorer.score(gt_dict, pred_dict, id_list)
+            print '############## sentence to sentence result #################'
+        except Exception, e:
+            print 'v2s bleu test exception'
 
     ######### test video generation #############
     if test_v2v:

@@ -17,7 +17,7 @@ from utils.record_helper import read_and_decode_with_frame
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_frame_center/'
+model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_switch/'
 learning_rate = 0.001
 # ['block_video', 'block_sent', 'random', 'keep']
 drop_strategy = 'random'
@@ -75,7 +75,8 @@ class Video_Caption_Generator():
 
     def build_model(self, video_feat, frames, video_mask, caption, caption_1, caption_mask):
         drop_type = tf.placeholder(tf.int32, shape=[])
-        loss_type = tf.placeholder(tf.int32, shape=[])
+        caption_weight = tf.placeholder(tf.float32, shape=[])
+        video_weight = tf.placeholder(tf.float32, shape=[])
         caption_mask = tf.cast(caption_mask, tf.float32)
         video_mask = tf.cast(video_mask, tf.float32)
         # for decoding
@@ -109,10 +110,6 @@ class Video_Caption_Generator():
         elif drop_type == 2:
             output1 = tf.constant(0.) * output1
             output1 = tf.stop_gradient(output1)
-        if loss_type == 1:
-            caption_weight = 0.
-        elif loss_type == 2:
-            video_weight = 0.
         ######## Dropout Stage #########
 
         ######## Semantic Learning Stage ########
@@ -168,9 +165,9 @@ class Video_Caption_Generator():
         loss_caption = loss_caption / tf.reduce_sum(caption_mask)
         loss_video = loss_video / tf.reduce_sum(video_mask[:,1:])
 
-        loss = tf.constant(caption_weight) * loss_caption + tf.constant(video_weight) * loss_video + \
+        loss = caption_weight * loss_caption + video_weight * loss_video + \
             tf.constant(latent_weight) * loss_latent
-        return loss, loss_caption, loss_latent, loss_video, output_semantic, output1, output2, drop_type, loss_type
+        return loss, loss_caption, loss_latent, loss_video, output_semantic, output1, output2, drop_type, caption_weight, video_weight
 
 
     def build_v2s_generator(self, video_feat):
@@ -377,7 +374,7 @@ def train():
                 batch_size=batch_size, num_threads=1, capacity=2* batch_size)
     # graph on the GPU
     with tf.device("/gpu:0"):
-        tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z, tf_v_h, tf_s_h, tf_drop_type, tf_loss_type \
+        tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z, tf_v_h, tf_s_h, tf_drop_type, tf_caption_weight, tf_video_weight\
             = model.build_model(train_data, train_frame_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
         val_v2s_tf,_ = model.build_v2s_generator(val_data)
         val_s2s_tf,_,_ = model.build_s2s_generator(val_caption_id_1)
@@ -441,6 +438,8 @@ def train():
     summary_writer = tf.summary.FileWriter(model_path + 'summary', sess.graph)
     epoch = global_step
     video_label = sess.run(train_video_label)
+    video_w = video_weight
+    caption_w = caption_weight
     for step in xrange(1, n_steps+1):
         tStart = time.time()
         if drop_strategy == 'keep':
@@ -451,23 +450,26 @@ def train():
             drop_type = 2
         else:
             drop_type = random.randint(0, 3)
-        if loss_strategy == 'keep':
-            loss_type = 0
-        elif loss_strategy == 'block_sentence':
-            loss_type = 1
+        if loss_strategy == 'block_sentence':
+            caption_w= 0.
         elif loss_strategy == 'block_video':
-            loss_type = 2
-        else:
+            video_w= 0.
+        elif loss_strategy == 'random':
             loss_type = random.randint(0, 3)
+            if loss_type == 1:
+                caption_w= 0.
+            elif loss_type == 2:
+                video_w= 0.
 
         _, loss_val, loss_cap, loss_lat, loss_vid = sess.run(
                 [train_op, tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid],
                 feed_dict={
                     tf_drop_type: drop_type,
-                    tf_loss_type: loss_type
+                    tf_caption_weight: caption_w,
+                    tf_video_weight: video_w
                     })
         tStop = time.time()
-        print "step:", step, " Loss:", loss_val, "loss_cap:", loss_cap*caption_weight, "loss_latent:", loss_lat*latent_weight, "loss_vid:", loss_vid * video_weight
+        print "step:", step, " Loss:", loss_val, "loss_cap:", loss_cap*caption_w, "loss_latent:", loss_lat*latent_weight, "loss_vid:", loss_vid * video_w
         print "Time Cost:", round(tStop - tStart, 2), "s"
         loss_epoch += loss_val
         loss_epoch_cap += loss_cap
