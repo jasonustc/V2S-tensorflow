@@ -17,17 +17,17 @@ from utils.record_helper import read_and_decode_with_frame
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_frame_center/'
+model_path = '/data11/shenxu/msvd_models/random_scale_frame_s2s/'
 learning_rate = 0.001
-drop_strategy = 'random'
+drop_strategy = 'block_video'
 caption_weight = 1.
-video_weight = 1.
+video_weight = 0.
 latent_weight = 0.01
 cpu_device = "/cpu:1"
-test_v2s = True
-test_v2v = True
+test_v2s = False
+test_v2v = False
 test_s2s = True
-test_s2v = True
+test_s2v = False
 #test_v2s = False
 #test_v2v = False
 #test_s2s = False
