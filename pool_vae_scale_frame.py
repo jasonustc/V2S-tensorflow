@@ -24,14 +24,14 @@ caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.01
 cpu_device = "/cpu:1"
-test_v2s = True
-test_v2v = True
-test_s2s = True
-test_s2v = True
-#test_v2s = False
-#test_v2v = False
-#test_s2s = False
-#test_s2v = False
+#test_v2s = True
+#test_v2v = True
+#test_s2s = True
+#test_s2v = True
+test_v2s = False
+test_v2v = False
+test_s2s = False
+test_s2v = False
 save_demo_sent_v2s = True
 save_demo_sent_s2s = True
 save_demo_video_v2v = True
@@ -539,7 +539,7 @@ def train():
 
 def test(model_path=None,
     video_data_path_test='/home/shenxu/data/msvd_feat_vgg_c3d_frame/test.tfrecords',
-    n_test_samples=27020, batch_size=20):
+    n_test_samples=27020):
 #    test_data = val_data   # to evaluate on testing data or validation data
     wordtoix = np.load(wordtoix_file).tolist()
     ixtoword = pd.Series(np.load(ixtoword_file).tolist())

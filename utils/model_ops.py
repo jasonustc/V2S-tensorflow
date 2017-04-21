@@ -36,7 +36,6 @@ n_video_steps = 45
 n_caption_steps = 35
 n_epochs = 200
 batch_size = 100
-#batch_size = 20
 learning_rate = 0.001
 num_threads = 3
 min_queue_examples = batch_size
