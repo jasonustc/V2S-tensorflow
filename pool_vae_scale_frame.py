@@ -32,13 +32,10 @@ test_v2s = False
 test_v2v = False
 test_s2s = False
 test_s2v = False
-save_demo_sent_v2s = False
+save_demo_sent_v2s = True
 save_demo_sent_s2s = False
-save_demo_video_v2v = True
-save_demo_video_s2v = True
-video_data_path_train = '/data10/shenxu/msvd_feat_vgg_c3d_frame/train.tfrecords'
-video_data_path_val = '/data10/shenxu/msvd_feat_vgg_c3d_frame/val.tfrecords'
-video_data_path_test = '/data10/shenxu/msvd_feat_vgg_c3d_frame/test.tfrecords'
+save_demo_video_v2v = False
+save_demo_video_s2v = False
 ###### custom parameters #####
 
 class Video_Caption_Generator():
@@ -639,13 +636,13 @@ def test(model_path=None,
         mse_s2v = test_all_videos(sess, n_test_steps, val_frame_data, val_s2v_tf, val_video_label, pixel_scale_factor)
         print 'caption2video mse:', mse_s2v
     if save_demo_sent_v2s:
-        get_demo_sentence(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname, result_file='demo_v2s.txt')
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname, result_file=home_folder + 'demo_v2s.txt')
     if save_demo_sent_s2s:
-        get_demo_sentence(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname, result_file='demo_s2s.txt')
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname, result_file=home_folder+'demo_s2s.txt')
     if save_demo_video_v2v:
-        get_demo_video(sess, n_test_steps, val_frame_data, val_v2v_tf, val_video_label, val_fname, 'demo_v2v/', pixel_scale_factor)
+        get_demo_video(sess, n_test_steps, val_frame_data, val_v2v_tf, val_video_label, val_fname, home_folder+'demo_v2v/', pixel_scale_factor)
     if save_demo_video_s2v:
-        get_demo_video(sess, n_test_steps, val_frame_data, val_s2v_tf, val_video_label, val_fname, 'demo_s2v/', pixel_scale_factor)
+        get_demo_video(sess, n_test_steps, val_frame_data, val_s2v_tf, val_video_label, val_fname, home_folder+'demo_s2v/', pixel_scale_factor)
 
     sys.stdout.flush()
     coord.request_stop()
