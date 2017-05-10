@@ -205,13 +205,15 @@ class Video_Caption_Generator():
         ####### Decoding ########
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        state3 = (c_init, output_semantic) # n x 2 x h
+        state3 = (c_init, m_init) # n x 2 x h
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
 
         generated_words = []
 
         with tf.variable_scope("model") as scope:
             scope.reuse_variables()
+            with tf.variable_scope("LSTM3"):
+                _, state3 = self.lstm3_dropout(output_semantic, state3)
             for i in range(self.n_caption_steps):
                 with tf.variable_scope("LSTM3") as vs:
                     output3, state3 = self.lstm3(current_embed, state3 ) # b x h
@@ -250,13 +252,15 @@ class Video_Caption_Generator():
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        state3 = (c_init, output_semantic) # n x 2 x h
+        state3 = (c_init, m_init) # n x 2 x h
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
 
         generated_words = []
 
         with tf.variable_scope("model") as scope:
             scope.reuse_variables()
+            with tf.variable_scope("LSTM3"):
+                _, state3 = self.lstm3_dropout(output_semantic, state3)
             for i in range(self.n_caption_steps):
                 with tf.variable_scope("LSTM3") as vs:
                     output3, state3 = self.lstm3(current_embed, state3 ) # b x h
