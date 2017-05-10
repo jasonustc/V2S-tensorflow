@@ -13,7 +13,7 @@ import unicodedata
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 from modules.variational_autoencoder import VAE
 from utils.model_ops import *
-from utils.record_helper import read_and_decode
+from utils.record_helper import read_and_decode_with_frame
 
 ###### custom parameters #######
 model_path = '/home/shenxu/V2S-tensorflow/models/lstm_lstm_vae_frame/'
@@ -59,7 +59,7 @@ class Video_Caption_Generator():
 
         self.vae = VAE(self.dim_hidden * 2, self.dim_hidden)
 
-        self.encode_image_W = tf.Variable(tf.random_uniform([dim_image, dim_hidden], -0.1, 0.1), name='encode_image_W')
+        self.encode_image_W = tf.Variable(tf.random_uniform([dim_video_feat, dim_hidden], -0.1, 0.1), name='encode_image_W')
         self.encode_image_b = tf.Variable(tf.zeros([dim_hidden]), name='encode_image_b')
         self.decode_image_W = tf.Variable(tf.random_uniform([dim_hidden, dim_image], -0.1, 0.1, name='decode_image_W'))
         self.decode_image_b = tf.Variable(tf.random_uniform([dim_image]), name='decode_image_b')
@@ -78,14 +78,9 @@ class Video_Caption_Generator():
         video_mask = tf.cast(video_mask, tf.float32)
         caption_mask = tf.cast(caption_mask, tf.float32)
         frames = frames * tf.constant(pixel_scale_factor)
-        # for decoding
-        video_flat = tf.reshape(video, [-1, self.dim_image]) # (b x nv) x d
-        image_emb = tf.nn.xw_plus_b( video_flat, self.encode_image_W, self.encode_image_b) # (b x nv) x h
-        image_emb = tf.reshape(image_emb, [self.batch_size, self.n_video_steps, self.dim_hidden]) # b x nv x h
-        image_emb = tf.transpose(image_emb, [1,0,2]) # n x b x h
 
         ### for encoding
-        encode_video_flat = tf.reshape(encode_video, [-1, self.dim_image]) # (b x nv) x d
+        encode_video_flat = tf.reshape(encode_video, [-1, dim_video_feat]) # (b x nv) x d
         encode_image_emb = tf.nn.xw_plus_b(encode_video_flat, self.encode_image_W, self.encode_image_b) # (b x nv) x h
         encode_image_emb = tf.reshape(encode_image_emb, [self.batch_size, self.n_video_steps, self.dim_hidden]) # b x n x h
 
@@ -139,14 +134,11 @@ class Video_Caption_Generator():
         loss_caption = 0.0
         loss_video = 0.0
 
-        image_part = tf.reshape(image_emb, [-1, self.dim_hidden]) # (nv x b) x d_im
-        image_part = tf.matmul(image_part, self.embed_att_Ua) + self.embed_att_ba # (nv x b) x h
-        image_part = tf.reshape(image_part, [self.n_video_steps, self.batch_size, self.dim_hidden]) # nv x b x h
         ## decoding sentence with attention
         with tf.variable_scope("model") as scope:
             # first write semantic into memory
             with tf.variable_scope("LSTM3"):
-                _, state3 = self.lstm3_dropout(tf.concat([output_semantic, output_semantic], 1), state3)
+                _, state3 = self.lstm3_dropout(output_semantic, state3)
             for i in xrange(self.n_caption_steps):
                 scope.reuse_variables()
                 with tf.variable_scope("LSTM3"):
@@ -193,7 +185,7 @@ class Video_Caption_Generator():
         state1 = (c_init, m_init)
         ####### Encoding Video ##########
         ### for encoding
-        encode_video_flat = tf.reshape(encode_video, [-1, self.dim_image]) # (b x nv) x d
+        encode_video_flat = tf.reshape(encode_video, [-1, dim_video_feat]) # (b x nv) x d
         encode_image_emb = tf.nn.xw_plus_b(encode_video_flat, self.encode_image_W, self.encode_image_b) # (b x nv) x h
         encode_image_emb = tf.reshape(encode_image_emb, [self.batch_size, self.n_video_steps, self.dim_hidden]) # b x n x h
         # encoding video
@@ -328,7 +320,7 @@ class Video_Caption_Generator():
         frames = frames * tf.constant(pixel_scale_factor)
         ######## Encoding Stage #########
         ### for encoding
-        encode_video_flat = tf.reshape(encode_video, [-1, self.dim_image]) # (b x nv) x d
+        encode_video_flat = tf.reshape(encode_video, [-1, dim_video_feat]) # (b x nv) x d
         encode_image_emb = tf.nn.xw_plus_b(encode_video_flat, self.encode_image_W, self.encode_image_b) # (b x nv) x h
         encode_image_emb = tf.reshape(encode_image_emb, [self.batch_size, self.n_video_steps, self.dim_hidden]) # b x n x h
         # encoding video
@@ -371,7 +363,7 @@ def train():
     assert os.path.isfile(video_data_path_val)
     assert os.path.isdir(model_path)
     print 'load meta data...'
-    wordtoix = np.load(home_folder + 'data0/wordtoix.npy').tolist()
+    wordtoix = np.load(wordtoix_file).tolist()
     print 'build model and session...'
     # place shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -560,7 +552,7 @@ def train():
 def test(model_path='models/model-900', video_feat_path=video_feat_path):
     meta_data, train_data, val_data, test_data = get_video_data_jukin(video_data_path_train, video_data_path_val, video_data_path_test)
 #    test_data = val_data   # to evaluate on testing data or validation data
-    ixtoword = pd.Series(np.load(home_folder + 'data0/ixtoword.npy').tolist())
+    ixtoword = pd.Series(np.load(ixtoword_file).tolist())
 
     model = Video_Caption_Generator(
             dim_image=dim_image,
