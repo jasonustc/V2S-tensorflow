@@ -27,14 +27,14 @@ cpu_device = "/cpu:0"
 test_v2s = False
 test_v2v = False
 test_s2s = False
-test_s2v = True
+test_s2v = False
 #test_v2s = False
 #test_v2v = False
 #test_s2s = False
 #test_s2v = False
-save_demo_sent_v2s = True
-save_demo_sent_s2s = True
-save_demo_video_v2v = True
+save_demo_sent_v2s = False
+save_demo_sent_s2s = False
+save_demo_video_v2v = False
 save_demo_video_s2v = True
 video_data_path_train = '/data10/shenxu/msvd_feat_vgg_c3d_frame/train.tfrecords'
 video_data_path_val = '/data10/shenxu/msvd_feat_vgg_c3d_frame/val.tfrecords'
@@ -538,8 +538,8 @@ def train():
     sess.close()
 
 def test(model_path=None,
-    video_data_path_test='/home/shenxu/data/msvd_feat_vgg_c3d_frame/test.tfrecords',
-    n_test_samples=27020):
+    video_data_path_test=video_data_path_val,
+    n_test_samples=n_val_samples):
 #    test_data = val_data   # to evaluate on testing data or validation data
     wordtoix = np.load(wordtoix_file).tolist()
     ixtoword = pd.Series(np.load(ixtoword_file).tolist())
@@ -573,27 +573,13 @@ def test(model_path=None,
         val_v2s_tf,v2s_lstm3_vars_tf = model.build_v2s_generator(val_data)
         val_s2s_tf, s2s_lstm3_vars_tf = model.build_s2s_generator(val_caption_id_1)
         val_s2v_tf, s2v_lstm4_vars_tf = model.build_s2v_generator(val_caption_id_1, val_frame_data)
-        val_v2v_tf, v2v_lstm4_vars_tf = model.build_v2v_generator(val_data, val_frame_data)
+        val_v2v_tf = model.build_v2v_generator(val_data, val_frame_data)
     sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True))
 
     with tf.device(cpu_device):
         saver = tf.train.Saver()
         saver.restore(sess, model_path)
         print 'load parameters from:', model_path
-
-#    print 'halve the dropout weights..'
-#    for ind, row in enumerate(v2s_lstm3_vars_tf):
-#        if ind % 4 == 0:
-#                assign_op = row.assign(tf.multiply(row,1-0.5))
-#                sess.run(assign_op)
-#    for ind, row in enumerate(s2s_lstm2_vars_tf):
-#        if ind % 4 == 0:
-#                assign_op = row.assign(tf.multiply(row,1-0.5))
-#                sess.run(assign_op)
-#    for ind, row in enumerate(s2v_lstm4_vars_tf):
-#        if ind % 4 == 0:
-#                assign_op = row.assign(tf.multiply(row,1-0.5))
-#                sess.run(assign_op)
 
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
@@ -604,54 +590,48 @@ def test(model_path=None,
     tstart = time.time()
     ### TODO: sometimes COCO test show exceptions in the beginning of training ####
     if test_v2s:
-        try:
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
-            for i, key in enumerate(pred_dict.keys()):
-                print 'video:', flist[i]
-                for ele in gt_dict[key]:
-                    print "GT:  " + ele['caption']
-                print "PD:  " + pred_dict[key][0]['caption']
-                print '-------'
-            print '############## video to sentence result #################'
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname)
-            scorer  = COCOScorer()
-            total_score_1 = scorer.score(gt_dict, pred_dict, id_list)
-            print '############## video to sentence result #################'
-        except Exception, e:
-            print 'v2s bleu test exception'
+        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)
+        for i, key in enumerate(pred_dict.keys()):
+            print 'video:', flist[i]
+            for ele in gt_dict[key]:
+                print "GT:  " + ele['caption']
+            print "PD:  " + pred_dict[key][0]['caption']
+            print '-------'
+        print '############## video to sentence result #################'
+        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname)
+        scorer  = COCOScorer()
+        total_score_1 = scorer.score(gt_dict, pred_dict, id_list)
+        print '############## video to sentence result #################'
 
     if test_s2s:
-        try:
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
-            for i, key in enumerate(pred_dict.keys()):
-                print 'video:', flist[i]
-                for ele in gt_dict[key]:
-                    print "GT:  " + ele['caption']
-                print "PD:  " + pred_dict[key][0]['caption']
-                print '-------'
-            print '############## sentence to sentence result #################'
-            [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname)
-            scorer = COCOScorer()
-            total_score_2 = scorer.score(gt_dict, pred_dict, id_list)
-            print '############## sentence to sentence result #################'
-        except Exception, e:
-            print 'v2s bleu test exception'
+        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_s2s_tf, val_fname)
+        for i, key in enumerate(pred_dict.keys()):
+            print 'video:', flist[i]
+            for ele in gt_dict[key]:
+                print "GT:  " + ele['caption']
+            print "PD:  " + pred_dict[key][0]['caption']
+            print '-------'
+        print '############## sentence to sentence result #################'
+        [pred_sent, gt_sent, id_list, gt_dict, pred_dict, _] = testing_all(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname)
+        scorer = COCOScorer()
+        total_score_2 = scorer.score(gt_dict, pred_dict, id_list)
+        print '############## sentence to sentence result #################'
 
     ######### test video generation #############
     if test_v2v:
-        mse_v2v = test_all_videos(sess, n_test_steps, val_data, val_v2v_tf, val_video_label, pixel_scale_factor)
+        mse_v2v = test_all_videos(sess, n_test_steps, val_frame_data, val_v2v_tf, val_video_label, pixel_scale_factor)
         print 'video2video mse:', mse_v2v
     if test_s2v:
-        mse_s2v = test_all_videos(sess, n_test_steps, val_data, val_s2v_tf, val_video_label, pixel_scale_factor)
+        mse_s2v = test_all_videos(sess, n_test_steps, val_frame_data, val_s2v_tf, val_video_label, pixel_scale_factor)
         print 'caption2video mse:', mse_s2v
     if save_demo_sent_v2s:
-        get_demo_sentence(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname, result_file='demo_v2s.txt')
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_v2s_tf, val_fname, result_file=home_folder+'demo_v2s.txt')
     if save_demo_sent_s2s:
-        get_demo_sentence(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname, result_file='demo_s2s.txt')
+        get_demo_sentence(sess, n_test_steps, ixtoword, val_s2s_tf, val_fname, result_file=home_folder+'demo_s2s.txt')
     if save_demo_video_v2v:
-        get_demo_video(sess, n_test_steps, val_frame_data, val_v2v_tf, val_video_label, val_fname, 'demo_v2v/', pixel_scale_factor)
+        get_demo_video(sess, n_test_steps, val_frame_data, val_v2v_tf, val_video_label, val_fname, home_folder+'demo_v2v/', pixel_scale_factor)
     if save_demo_video_s2v:
-        get_demo_video(sess, n_test_steps, val_frame_data, val_s2v_tf, val_video_label, val_fname, 'demo_s2v/', pixel_scale_factor)
+        get_demo_video(sess, n_test_steps, val_frame_data, val_s2v_tf, val_video_label, val_fname, home_folder+'demo_s2v/', pixel_scale_factor)
 
     sys.stdout.flush()
     coord.request_stop()
@@ -659,7 +639,6 @@ def test(model_path=None,
     tstop = time.time()
     print "Total Time Cost:", round(tstop - tstart, 2), "s"
     sess.close()
-
 
 if __name__ == '__main__':
     args = parse_args()
