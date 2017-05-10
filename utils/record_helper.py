@@ -172,12 +172,12 @@ def read_and_decode_with_frame(filename):
 	caption_id_4 = tf.reshape(caption_id_4, [35])
 	caption_id_5 = tf.decode_raw(features['caption_id_5'], tf.int32)
 	caption_id_5 = tf.reshape(caption_id_5, [35])
-        frame_data = tf.decode_raw(features['frame_data'], tf.float32)
-        frame_data = tf.reshape(frame_data, [45, resize_height*resize_width*3])
-        fname = features['fname']
-        title = features['title']
-        return data, encode_data, fname, title, video_label, caption_label, caption_id, \
-            caption_id_1, caption_id_2, caption_id_3, caption_id_4, caption_id_5, frame_data
+	frame_data = tf.decode_raw(features['frame_data'], tf.float32)
+	frame_data = tf.reshape(frame_data, [45, resize_height*resize_width*3])
+	fname = features['fname']
+	title = features['title']
+	return data, encode_data, fname, title, video_label, caption_label, caption_id, \
+	caption_id_1, caption_id_2, caption_id_3, caption_id_4, caption_id_5, frame_data
 #	with tf.Session() as sess:
 #		coord = tf.train.Coordinator()
 #		threads = tf.train.start_queue_runners(sess=sess, coord=coord)
