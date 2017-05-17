@@ -2,7 +2,7 @@
 import tensorflow as tf
 import pandas as pd
 import numpy as np
-import os, h5py, sys, argparse
+import os, h5py, sys, argparse, random
 import pdb
 import time
 import json
@@ -19,7 +19,7 @@ from utils.record_helper import read_and_decode_with_frame
 model_path = '/home/shenxu/V2S-tensorflow/models/lstm_lstm_vae_frame/'
 cpu_device = "/cpu:0"
 learning_rate = 0.0001
-drop_strategy = 'random'
+drop_strategy = 'keep'
 caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.001
@@ -27,6 +27,9 @@ test_v2s = True
 test_v2v = True
 test_s2s = True
 test_s2v = True
+video_data_path_train = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/train.tfrecords'
+video_data_path_val = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/val.tfrecords'
+video_data_path_test = '/disk_new/shenxu/msvd_feat_vgg_c3d_batch/test.tfrecords'
 ###### custom parameters #######
 
 class Video_Caption_Generator():
@@ -151,7 +154,7 @@ class Video_Caption_Generator():
                 with tf.device(cpu_device):
                     current_embed = tf.nn.embedding_lookup(self.Wemb, caption[:,i])
 
-                logit_words = tf.nn.xw_plus_b(output3_2, self.embed_word_W, self.embed_word_b) # b x w
+                logit_words = tf.nn.xw_plus_b(output3, self.embed_word_W, self.embed_word_b) # b x w
                 cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits = logit_words, 
                     labels = onehot_labels) # b x 1
                 cross_entropy = cross_entropy * caption_mask[:,i] # b x 1
@@ -176,7 +179,7 @@ class Video_Caption_Generator():
         loss_caption = loss_caption / tf.reduce_sum(caption_mask)
         loss_video = loss_video / tf.reduce_sum(video_mask)
 
-        loss = weight_caption * loss_caption + weight_latent * loss_latent + weight_video * loss_video
+        loss = caption_weight * loss_caption + latent_weight * loss_latent + video_weight * loss_video
         return loss, loss_caption, loss_latent, loss_video, drop_type
 
     def build_v2s_generator(self, encode_video):
@@ -190,8 +193,8 @@ class Video_Caption_Generator():
         encode_image_emb = tf.reshape(encode_image_emb, [self.batch_size, self.n_video_steps, self.dim_hidden]) # b x n x h
         # encoding video
         with tf.variable_scope("model") as scope:
+            scope.reuse_variables()
             for i in xrange(self.n_video_steps):
-                if i > 0: scope.reuse_variables()
                 with tf.variable_scope("LSTM1"):
                    output1, state1 = self.lstm1_dropout(encode_image_emb[:, i, :], state1) # b x h
         ####### Encoding Video ##########
@@ -329,8 +332,8 @@ class Video_Caption_Generator():
         encode_image_emb = tf.reshape(encode_image_emb, [self.batch_size, self.n_video_steps, self.dim_hidden]) # b x n x h
         # encoding video
         with tf.variable_scope("model") as scope:
+            scope.reuse_variables()
             for i in xrange(self.n_video_steps):
-                if i > 0: scope.reuse_variables()
                 with tf.variable_scope("LSTM1"):
                    output1, state1 = self.lstm1_dropout(encode_image_emb[:, i, :], state1) # b x h
         ######## Encoding Stage #########
@@ -366,8 +369,11 @@ def train():
     assert os.path.isfile(video_data_path_train)
     assert os.path.isfile(video_data_path_val)
     assert os.path.isdir(model_path)
+    assert os.path.isfile(wordtoix_file)
+    assert os.path.isfile(ixtoword_file)
     print 'load meta data...'
     wordtoix = np.load(wordtoix_file).tolist()
+    ixtoword = pd.Series(np.load(ixtoword_file).tolist())
     print 'build model and session...'
     # place shared parameters on the GPU
     with tf.device("/gpu:0"):
@@ -397,7 +403,7 @@ def train():
             tf.train.batch([val_frame_data, val_encode_data, val_video_label, val_fname, val_caption_id, val_caption_id_1], batch_size=batch_size, num_threads=1, capacity=2*batch_size)
     # operation on the GPU
     with tf.device("/gpu:0"):
-        tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, _ = \
+        tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_drop_type = \
             model.build_model(train_frame_data, train_encode_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
         val_v2s_tf,_ = model.build_v2s_generator(val_encode_data)
         val_s2s_tf,_,_ = model.build_s2s_generator(val_caption_id_1)
