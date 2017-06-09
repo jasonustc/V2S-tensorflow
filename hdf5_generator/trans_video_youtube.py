@@ -24,9 +24,13 @@ vgg_feat_folder_test = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_te
 c3d_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_train/'
 c3d_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_val/'
 c3d_feat_folder_test = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_test/'
+cat_feat_folder = '/disk_new/yjiwei/msrvtt/train/category/'
+att_feat_folder = '/disk_new/yjiwei/msrvtt/train/image_attributes/'
 v2s_json = home_folder + 'msrvtt2sent.json'
 vgg_feat_name = 'frame_vgg'
 c3d_feat_name = 'frame_c3d'
+cat_feat_name = 'category'
+att_feat_name = 'image_attribute'
 feature_folder = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/'
 video_frame_folder = '/disk_2T/shenxu/YoutubeClip_frames/'
 resize_height = 36
@@ -266,6 +270,77 @@ def trans_video_msrvtt_record(datasplit_list, datasplit, vgg_feat_name, c3d_feat
 #                    print 'caption_id_5:', cap_id_5[ :]
                     write_data_as_record(writer, sample_data, encode_data, video_name, title, vl, capl,
                         cap_id, cap_id_1, cap_id_2, cap_id_3, cap_id_4, cap_id_5)
+                    cnt += 1
+    print 'totally', cnt, 'v2s pairs.'
+    writer.close()
+
+def trans_video_msrvtt_record_cat_att(datasplit_list, datasplit, wordtoix):
+#    assert datasplit in ['train', 'val', 'test']
+    assert len(datasplit_list) > 0
+    assert os.path.isfile(v2s_json)
+    re = json.load(open(v2s_json))
+    n_length = 45
+    cap_length = 35
+
+    initial = 0
+    cnt = 0
+    filename = feature_folder + datasplit + '.tfrecords'
+    print('Writing', filename)
+    writer = tf.python_io.TFRecordWriter(filename)
+    for ele in datasplit_list:
+        if datasplit == 'train':
+            vgg_feat_file = vgg_feat_folder_train + ele
+            c3d_feat_file = c3d_feat_folder_train + ele
+        elif datasplit == 'val':
+            vgg_feat_file = vgg_feat_folder_val + ele
+            c3d_feat_file = c3d_feat_folder_val + ele
+        else:
+            vgg_feat_file = vgg_feat_folder_test + ele
+            c3d_feat_file = c3d_feat_folder_test + ele
+        cat_feat_file = cat_feat_folder + ele
+        att_feat_file = att_feat_folder + ele
+        frame_folder = video_frame_folder + ele
+        assert os.path.isfile(vgg_feat_file)
+        assert os.path.isfile(c3d_feat_file)
+        assert os.path.isfile(cat_feat_file)
+        assert os.path.isfile(att_feat_file)
+        vgg_feat = np.squeeze(np.asarray(h5py.File(vgg_feat_file)[vgg_feat_name]))
+        c3d_feat = np.squeeze(np.asarray(h5py.File(c3d_feat_file)[c3d_feat_name]))
+        cat_feat = np.squeeze(np.asarray(h5py.File(cat_feat_file)[cat_feat_name]))
+        att_feat = np.squeeze(np.asarray(h5py.File(att_feat_file)[att_feat_name]))
+        pdb.set_trace()
+        # to solve the number of frames mismatch between different videos
+        sample_data = np.zeros([n_length, 4096 * 2])
+        encode_data = np.zeros([n_length, 4096 * 2])
+        concat_feat = np.concatenate((vgg_feat, c3d_feat), axis = 1)
+        frame_feat = load_video_frames(frame_folder, resize_height=resize_height, resize_width=resize_width)
+        # post pad
+        sample_data[:concat_feat.shape[0], :] = concat_feat
+        # pre pad
+        encode_data[-concat_feat.shape[0]:, :] = concat_feat
+        # post pad
+        frame_data[:frame_feat.shape[0], :] = frame_feat
+        video_name = ele
+        if video_name in re.keys():
+            print video_name, 'num_sen:', len(re[video_name])
+            caps = re[video_name]
+            for xxx in caps:
+                en_cap_ind = random.sample(range(0, len(caps)), 5)
+                if len(xxx.split(' ')) < 35:
+                    title = unicodedata.normalize('NFKD', xxx).encode('ascii','ignore')
+                    ### video label ###
+                    vl = np.zeros([n_length])
+                    vl[:concat_feat.shape[0]] = 1
+                    ### caption of word ids ###
+                    cap_id, n_words = get_cap_ids(xxx, wordtoix, cap_length, pad='post')
+                    cap_id_1, n_word_1 = get_cap_ids(caps[en_cap_ind[0]], wordtoix, cap_length, pad='pre')
+                    cap_id = np.hstack([cap_id, np.zeros([1,1])]).astype(int)
+                    cap_id_1 = np.hstack([cap_id_1, np.zeros([1,1])]).astype(int)
+                    ### caption labels ###
+                    capl = np.zeros([cap_length])
+                    capl[:n_words + 1] = 1
+                    write_data_as_record_cat_att(writer, sample_data, encode_data, 
+                        video_name, title, vl, capl, cap_id, cap_id_1, frame_data, cat_feat, att_feat)
                     cnt += 1
     print 'totally', cnt, 'v2s pairs.'
     writer.close()
