@@ -79,6 +79,10 @@ class Video_Caption_Generator():
         # learnable coefficient for normalized video and sentence feature
         self.video_coeff = tf.Variable(tf.ones([1]), name='video_coeff')
         self.sent_coeff = tf.Variable(tf.ones([1]), name='sent_coeff')
+        self.h2h_w = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden], -0.1, 0.1), name='h2h_w')
+        self.h2h_b = tf.Variable(tf.zeros([dim_hidden]), name='h2h_b')
+        self.h2c_w = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden], -0.1, 0.1), name='h2c_w')
+        self.h2c_w = tf.Variable(tf.zeros([dim_hidden]), name='h2c_b')
 
     def build_model(self, frames, encode_video, video_mask, caption, caption_1, caption_mask,
         cat_data, att_data):
@@ -133,13 +137,14 @@ class Video_Caption_Generator():
         output2 = self.sent_coeff * tf.nn.l2_normalize(output2, 1)
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         loss_latent, output_semantic = self.vae(input_state)
-        h0 = tf.nn.tanh(output_semantic)
+        h0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2h_w) + self.h2h_b
+        c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
         tf.summary.histogram('z', output_semantic)
         ######## Semantic Learning Stage ########
 
         ######## Decoding Stage ##########
-        state3 = (c_init, h0)
-        state4 = (c_init, h0)
+        state3 = (c0, h0)
+        state4 = (c0, h0)
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         video_prev = frames[:, 0, :]
 
@@ -216,12 +221,12 @@ class Video_Caption_Generator():
         output2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
-        h0 = tf.nn.tanh(output_semantic)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        state3 = (c_init, h0) # n x 2 x h
+        h0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2h_w) + self.h2h_b
+        c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
+        state3 = (c0, h0) # n x 2 x h
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
 
         generated_words = []
@@ -268,11 +273,12 @@ class Video_Caption_Generator():
         output1 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
-        h0 = tf.nn.tanh(output_semantic)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        state3 = (c_init, h0) # n x 2 x h
+        h0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2h_w) + self.h2h_b
+        c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
+        state3 = (c0, h0) # n x 2 x h
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         att_data = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
 
@@ -319,11 +325,12 @@ class Video_Caption_Generator():
         output1 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.vae(input_state)
-        h0 = tf.nn.tanh(output_semantic)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        state4 = (c_init, h0) # n x 2 x h
+        h0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2h_w) + self.h2h_b
+        c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
+        state4 = (c0, h0) # n x 2 x h
         frame_prev = frames[:, 0, :]
 
         generated_images = []
@@ -367,11 +374,12 @@ class Video_Caption_Generator():
         output2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.vae(input_state)
-        h0 = tf.nn.tanh(output_semantic)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        state4 = (c_init, h0) # n x 2 x h
+        h0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2h_w) + self.h2h_b
+        c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
+        state4 = (c0, h0) # n x 2 x h
         frame_prev = frames[:, 0, :] # b x d_im
 
         generated_images = []

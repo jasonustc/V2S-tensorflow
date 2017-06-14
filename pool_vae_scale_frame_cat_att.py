@@ -79,6 +79,10 @@ class Video_Caption_Generator():
         # learnable coefficient for normalized video and sentence feature
         self.video_coeff = tf.Variable(tf.ones([1]), name='video_coeff')
         self.sent_coeff = tf.Variable(tf.ones([1]), name='sent_coeff')
+        self.h2h_w = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden], -0.1, 0.1), name='h2h_w')
+        self.h2h_b = tf.Variable(tf.zeros([dim_hidden]), name='h2h_b')
+        self.h2c_w = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden], -0.1, 0.1), name='h2c_w')
+        self.h2c_w = tf.Variable(tf.zeros([dim_hidden]), name='h2c_b')
 
     def build_model(self, video_feat, frames, video_mask, caption, caption_1, caption_mask,
         cat_data, att_data):
@@ -126,13 +130,14 @@ class Video_Caption_Generator():
         tf.summary.scalar('sent_coeff', self.sent_coeff)
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         loss_latent, output_semantic = self.vae(input_state)
-        h0 = tf.nn.tanh(output_semantic)
         tf.summary.histogram('z', output_semantic)
         ######## Semantic Learning Stage ########
 
         ######## Decoding Stage ##########
-        state3 = (c_init, h0) # 2 x b x h
-        state4 = (c_init, h0) # 2 x b x h
+        h0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2h_w) + self.h2h_b
+        c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
+        state3 = (c0, h0) # 2 x b x h
+        state4 = (c0, h0) # 2 x b x h
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         video_prev = frames[:, 0, :] # first frame
 
@@ -198,12 +203,12 @@ class Video_Caption_Generator():
         output2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
-        h0 = tf.nn.tanh(output_semantic)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        state3 = (c_init, h0) # n x 2 x h
+        h0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2h_w) + self.h2h_b
+        c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
+        state3 = (c0, h0) # n x 2 x h
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
 
         generated_words = []
@@ -247,11 +252,12 @@ class Video_Caption_Generator():
         output1 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x h, b x h
         _, output_semantic = self.vae(input_state)
-        h0 = tf.nn.tanh(output_semantic)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        state3 = (c_init, h0) # n x 2 x h
+        h0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2h_w) + self.h2h_b
+        c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
+        state3 = (c0, h0) # n x 2 x h
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         att_data = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
 
@@ -295,11 +301,12 @@ class Video_Caption_Generator():
         output1 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.vae(input_state)
-        h0 = tf.nn.tanh(output_semantic)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        state4 = (c_init, h0) # n x 2 x h
+        h0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2h_w) + self.h2h_b
+        c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
+        state4 = (c0, h0) # n x 2 x h
         frame_prev = frames[:, 0, :]
 
         generated_images = []
@@ -335,12 +342,12 @@ class Video_Caption_Generator():
         output2 = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         input_state = tf.concat([output1, output2], 1) # b x (2 * h)
         _, output_semantic = self.vae(input_state)
-        h0 = tf.nn.tanh(output_semantic)
         ####### Semantic Mapping ########
 
         ####### Decoding ########
-        c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        state4 = (c_init, h0) # n x 2 x h
+        h0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2h_w) + self.h2h_b
+        c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
+        state4 = (c0, h0) # n x 2 x h
         frame_prev = frames[:, 0, :] # b x d_im
 
         generated_images = []
@@ -387,22 +394,25 @@ def train():
     # preprocess on the CPU
     with tf.device('/cpu:0'):
         train_data, train_encode_data, _, _, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
-            _, _, _, _, train_frame_data = read_and_decode_with_frame(video_data_path_train)
+            train_frame_data, train_cat_data, train_att_data = read_and_decode_frame_cat_att(video_data_path_train)
         val_data, val_encode_data, val_fname, val_title, val_video_label, val_caption_label, val_caption_id, val_caption_id_1, \
-            _, _, _, _, val_frame_data = read_and_decode_with_frame(video_data_path_val)
+            val_frame_data, val_cat_data, val_att_data = read_and_decode_frame_cat_att(video_data_path_val)
        # random batches
-        train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data = \
-            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data],
+        train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, train_frame_data, \
+         train_cat_data, train_att_data = \
+            tf.train.shuffle_batch([train_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
+                train_frame_data, train_cat_data, train_att_data],
                 batch_size=batch_size, num_threads=num_threads, capacity=prefetch, min_after_dequeue=min_queue_examples)
-        val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_frame_data = \
-            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_frame_data],
-                batch_size=batch_size, num_threads=1, capacity=2* batch_size)
+        val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_frame_data, val_cat_data, val_att_data = \
+            tf.train.batch([val_data, val_video_label, val_fname, val_caption_label, val_caption_id_1, val_frame_data, \
+                val_cat_data, val_att_data], batch_size=batch_size, num_threads=1, capacity=2* batch_size)
     # graph on the GPU
     with tf.device("/gpu:0"):
         tf_loss, tf_loss_cap, tf_loss_lat, tf_loss_vid, tf_z, tf_v_h, tf_s_h, tf_drop_type \
-            = model.build_model(train_data, train_frame_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label)
-        val_v2s_tf,_ = model.build_v2s_generator(val_data)
-        val_s2s_tf,_,_ = model.build_s2s_generator(val_caption_id_1)
+            = model.build_model(train_data, train_frame_data, train_video_label, train_caption_id, train_caption_id_1, train_caption_label, \
+                train_cat_data, train_att_data)
+        val_v2s_tf,_ = model.build_v2s_generator(val_data, val_cat_data, val_att_data)
+        val_s2s_tf,_,_ = model.build_s2s_generator(val_caption_id_1, val_cat_data)
         val_s2v_tf,_,_ = model.build_s2v_generator(val_caption_id_1, val_frame_data)
         val_v2v_tf,_ = model.build_v2v_generator(val_data, val_frame_data)
 
