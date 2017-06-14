@@ -237,7 +237,7 @@ def read_and_decode_with_frame(filename):
 #		coord.join(threads)
 #		sess.close()
 
-def read_and_decode_cat_att(filename):
+def read_and_decode_frame_cat_att(filename):
 	# why num_epoches not work here?
 	filename_queue = tf.train.string_input_producer([filename])
 	reader = tf.TFRecordReader()

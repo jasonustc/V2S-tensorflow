@@ -108,7 +108,6 @@ def  load_frame(frame_path, resize_height=None, resize_width=None):
 #    print frame_data.shape
     if resize_height and resize_width:
         frame_data = cv2.resize(frame_data, (resize_width, resize_height))
-        pdb.set_trace()
 #        cv2.imwrite('test_resize.jpg', frame_data)
 #        print frame_data.shape
     return np.reshape(frame_data, (resize_width*resize_height*3,))
