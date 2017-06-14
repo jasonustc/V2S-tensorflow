@@ -9,15 +9,15 @@ from keras.preprocessing import sequence
 import random
 import sys
 sys.path.insert(0, os.path.abspath('../'))
-from utils.record_helper import write_data_as_record
+from utils.record_helper import write_data_as_record_cat_att
 import tensorflow as tf
 import cv2
 
 home_folder = '/home/shenxu/V2S-tensorflow/'
 word_count_threshold = 1
 
-####################################################################
-feature_folder = '/disk_2T/shenxu/msrvtt_feat_vgg_c3d_frame/'
+################ MSRVTT #########################################
+feature_folder = '/home/shenxu/data/msrvtt_frame_cat_att/'
 vgg_feat_folder_train = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_train/'
 vgg_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_val/'
 vgg_feat_folder_test = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_vgg_test/'
@@ -31,11 +31,10 @@ vgg_feat_name = 'frame_vgg'
 c3d_feat_name = 'frame_c3d'
 cat_feat_name = 'category'
 att_feat_name = 'image_attribute'
-feature_folder = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/'
-video_frame_folder = '/disk_2T/shenxu/YoutubeClip_frames/'
-resize_height = 36
-resize_width = 64
-#################################################
+video_frame_folder = '/disk_2T/XuKS/msr-vtt/TrainValVideo/'
+resize_height = 64
+resize_width = 48
+######################### YouTube2Txt ##############################################
 #vgg_feat_name = 'fc6'
 #c3d_feat_name = 'fc6'
 #feature_folder = '/disk_2T/shenxu/msvd_feat_vgg_c3d_frame/'
@@ -103,20 +102,22 @@ def build_vocab(train_set, dataset_name):
 def  load_frame(frame_path, resize_height=None, resize_width=None):
     assert os.path.isfile(frame_path)
     frame_data = cv2.imread(frame_path)
-    pdb.set_trace()
 #    cv2.imwrite('test.jpg', frame_data)
 #    print frame_data.shape
     if resize_height and resize_width:
         frame_data = cv2.resize(frame_data, (resize_width, resize_height))
-        pdb.set_trace()
 #        cv2.imwrite('test_resize.jpg', frame_data)
 #        print frame_data.shape
+#    pdb.set_trace()
     return np.reshape(frame_data, (resize_width*resize_height*3,))
 
 def load_video_frames(video_path, resize_height=None, resize_width=None):
     assert os.path.isdir(video_path)
     frames = os.listdir(video_path)
     frame_data = []
+    if len(frames) > 45:
+        # only take the preceding 45 frames
+        frames = frames[:45]
     for frame in frames:
         frame_data.append(load_frame(os.path.join(video_path, frame), resize_height=resize_height, resize_width=resize_width))
     return np.stack(frame_data)
@@ -297,8 +298,8 @@ def trans_video_msrvtt_record_cat_att(datasplit_list, datasplit, wordtoix):
         else:
             vgg_feat_file = vgg_feat_folder_test + ele
             c3d_feat_file = c3d_feat_folder_test + ele
-        cat_feat_file = cat_feat_folder + ele
-        att_feat_file = att_feat_folder + ele
+        cat_feat_file = cat_feat_folder + ele + '.h5'
+        att_feat_file = att_feat_folder + ele + '.h5'
         frame_folder = video_frame_folder + ele
         assert os.path.isfile(vgg_feat_file)
         assert os.path.isfile(c3d_feat_file)
@@ -308,10 +309,10 @@ def trans_video_msrvtt_record_cat_att(datasplit_list, datasplit, wordtoix):
         c3d_feat = np.squeeze(np.asarray(h5py.File(c3d_feat_file)[c3d_feat_name]))
         cat_feat = np.squeeze(np.asarray(h5py.File(cat_feat_file)[cat_feat_name]))
         att_feat = np.squeeze(np.asarray(h5py.File(att_feat_file)[att_feat_name]))
-        pdb.set_trace()
         # to solve the number of frames mismatch between different videos
         sample_data = np.zeros([n_length, 4096 * 2])
         encode_data = np.zeros([n_length, 4096 * 2])
+        frame_data = np.zeros([n_length, resize_height*resize_width*3])
         concat_feat = np.concatenate((vgg_feat, c3d_feat), axis = 1)
         frame_feat = load_video_frames(frame_folder, resize_height=resize_height, resize_width=resize_width)
         # post pad
@@ -339,7 +340,7 @@ def trans_video_msrvtt_record_cat_att(datasplit_list, datasplit, wordtoix):
                     ### caption labels ###
                     capl = np.zeros([cap_length])
                     capl[:n_words + 1] = 1
-                    write_data_as_record_cat_att(writer, sample_data, encode_data, 
+                    write_data_as_record_cat_att(writer, sample_data, encode_data,
                         video_name, title, vl, capl, cap_id, cap_id_1, frame_data, cat_feat, att_feat)
                     cnt += 1
     print 'totally', cnt, 'v2s pairs.'
@@ -507,10 +508,10 @@ def getlist(feature_folder_name, split):
 
 
 if __name__ == '__main__':
-    dataset = np.load(home_folder + 'data0/msvd_dataset.npz')
-    wordtoix, _ = build_vocab(dataset['train'], 'msvd')
-    trans_video_youtube_record(dataset['train'][:3], 'train_for_test', vgg_feat_name, c3d_feat_name, wordtoix)
-#    trans_video_msrvtt_record(dataset['val'], 'val', vgg_feat_name, c3d_feat_name, wordtoix)
+    dataset = np.load(home_folder + 'data0/msrvtt_dataset.npz')
+    wordtoix, _ = build_vocab(dataset['train'], 'msrvtt')
+#    trans_video_msrvtt_record_cat_att(dataset['train'], 'train', wordtoix)
+    trans_video_msrvtt_record_cat_att(dataset['val'], 'val', wordtoix)
 #    trans_video_youtube_record(dataset['test'], 'test', vgg_feat_name, c3d_feat_name, wordtoix)
 #    getlist(feature_folder,'train')
 #    getlist(feature_folder,'val')
