@@ -6,8 +6,12 @@ import os
 import pdb
 import h5py
 
-resize_height = 36
-resize_width = 64
+### MSVD ###
+#resize_height = 36
+#resize_width = 64
+### MSRVTT ###
+resize_height = 64
+resize_width = 48
 
 def _int64_feature(value):
 	return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
@@ -280,11 +284,19 @@ def read_and_decode_frame_cat_att(filename):
 	return data, encode_data, fname, title, video_label, caption_label, caption_id, \
 	caption_id_1, frame_data, cat_data, att_data
 
-#record_file=write_data_as_record('../data0/train000000.h5')
-#read_record_file(record_file)
-#read_record_queue('/disk_2T/shenxu/msvd_feat_vgg_c3d_batch/train.tfrecords')
-
-
+##### test data reading #####
+if __name__ == "__main__":
+    data, encode_data, fname, title, video_label, caption_label, caption_id, \
+    caption_id_1, frame_data, cat_data, att_data = read_and_decode_frame_cat_att('/home/shenxu/data/msrvtt_frame_cat_att/train.tfrecords')
+    with tf.device("/cpu:0"):
+        sess = tf.InteractiveSession()
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    data, encode_data, fname, title, video_label, caption_label, caption_id, caption_id_1, frame_data, cat_data, att_data = \
+        sess.run([data, encode_data, fname, title, video_label, caption_label, caption_id, caption_id_1, frame_data, cat_data, att_data])
+    coord.request_stop()
+    coord.join(threads)
+    pdb.set_trace()
 
 #a = tf.Variable(tf.random_uniform([5, 2, 3], -1, 1), name='a')
 #b = tf.Variable(tf.random_uniform([3, 3], -1, 1), name='b')

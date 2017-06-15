@@ -29,9 +29,13 @@ ixtoword_file = home_folder + 'data0/msvd_ixtoword.npy'
 bias_init_vector_file = home_folder + 'data0/msvd_bias_init_vector.npy'
 
 ############## Train Parameters #################
-dim_image = 6912
+### MSVD ###
+#dim_image = 6912
+### MSRVTT ###
+dim_image = 9216
 dim_video_feat = 2*4096
-dim_hidden= 512
+dim_hidden = 512
+dim_att = 1000
 n_video_steps = 45
 n_caption_steps = 35
 n_epochs = 200
@@ -46,8 +50,12 @@ n_val_samples = 4149
 n_test_samples = 27020
 feat_scale_factor = 0.013
 pixel_scale_factor = 0.00392
+#### MSVD ####
 resize_height = 36
 resize_width = 64
+#### MSRVTT ####
+#resize_height = 64
+#resize_width = 48
 ##################################################
 
 ######### general operations #####################

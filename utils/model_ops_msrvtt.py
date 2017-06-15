@@ -12,8 +12,10 @@ from cocoeval import COCOScorer
 import unicodedata
 
 ############### Global Parameters ###############
-video_data_path_train = '/data11/shenxu/msrvtt_feat_vgg_c3d_batch/train.tfrecords'
-video_data_path_val = '/data11/shenxu/msrvtt_feat_vgg_c3d_batch/val.tfrecords'
+#video_data_path_train = '/data11/shenxu/msrvtt_feat_vgg_c3d_batch/train.tfrecords'
+video_data_path_train = '/home/shenxu/data/msrvtt_frame_cat_att/train.tfrecords'
+#video_data_path_val = '/data11/shenxu/msrvtt_feat_vgg_c3d_batch/val.tfrecords'
+video_data_path_val = '/home/shenxu/data/msrvtt_frame_cat_att/val.tfrecords'
 video_data_path_test = None
 # seems to be no use
 video_feat_path = '/data11/shenxu/msrvtt_feat_vgg_c3d_batch/'
@@ -25,8 +27,10 @@ wordtoix_file = '/home/shenxu/V2S-tensorflow/data0/msrvtt_wordtoix.npy'
 ixtoword_file = '/home/shenxu/V2S-tensorflow/data0/msrvtt_ixtoword.npy'
 
 ############## Train Parameters #################
-dim_image = 4096*2
+dim_image = 9216
+dim_video_feat = 2*4096
 dim_hidden= 512
+dim_att = 1000
 n_video_steps = 45
 n_caption_steps = 35
 n_epochs = 200
@@ -40,9 +44,12 @@ n_train_samples = 130175
 n_val_samples = 9933
 n_test_samples = None
 feat_scale_factor = 0.0150
+pixel_scale_factor = 0.00392
+resize_height = 64
+resize_width = 48
 ##################################################
 def get_model_step(model_path):
-    assert os.path.isfile(model_path)
+    assert os.path.isfile(model_path + '.meta')
     MODEL_REGEX = r'model-(\d+)'
     model_file = os.path.basename(model_path)
     find = re.match(MODEL_REGEX, model_file)

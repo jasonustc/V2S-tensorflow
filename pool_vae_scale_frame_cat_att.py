@@ -12,26 +12,26 @@ from cocoeval import COCOScorer
 import unicodedata
 from tensorflow.python.tools.inspect_checkpoint import print_tensors_in_checkpoint_file
 from modules.variational_autoencoder import VAE
-from utils.model_ops import *
+from utils.model_ops_msrvtt import *
 from utils.record_helper import read_and_decode_frame_cat_att
 import random
 
 #### custom parameters #####
-model_path = '/home/shenxu/V2S-tensorflow/models/random_scale_frame/'
-learning_rate = 0.0001
-drop_strategy = 'block_video'
-caption_weight = 0.
+model_path = '/disk_new/shenxu/models/pool_frame_cat_att/'
+learning_rate = 0.001
+drop_strategy = 'keep'
+caption_weight = 1.
 video_weight = 1.
 latent_weight = 0.001
 cpu_device = "/cpu:1"
-#test_v2s = True
-#test_v2v = True
-#test_s2s = True
-#test_s2v = True
-test_v2s = False
-test_v2v = False
-test_s2s = False
-test_s2v = False
+test_v2s = True
+test_v2v = True
+test_s2s = True
+test_s2v = True
+#test_v2s = False
+#test_v2v = False
+#test_s2s = False
+#test_s2v = False
 save_demo_sent_v2s = True
 save_demo_sent_s2s = False
 save_demo_video_v2v = False
@@ -76,6 +76,10 @@ class Video_Caption_Generator():
         else:
             self.embed_word_b = tf.Variable(tf.zeros([n_words]), name='embed_word_b')
 
+        # attribute embedding
+        self.embed_att_w = tf.Variable(tf.random_uniform([dim_att, dim_hidden], -0.1,0.1), name='embed_att_w')
+        self.embed_att_b = tf.Variable(tf.zeros([dim_hidden]), name='embed_att_b')
+
         # learnable coefficient for normalized video and sentence feature
         self.video_coeff = tf.Variable(tf.ones([1]), name='video_coeff')
         self.sent_coeff = tf.Variable(tf.ones([1]), name='sent_coeff')
@@ -96,6 +100,9 @@ class Video_Caption_Generator():
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         state2 = (c_init, m_init) # 2 x b x h
+
+        ### embedding of attribute
+        embed_att= tf.nn.xw_plus_b(att_data, self.embed_att_w, self.embed_att_b)
 
         ######## Encoding Stage #########
         # encoding video
@@ -149,7 +156,7 @@ class Video_Caption_Generator():
             for i in xrange(n_caption_steps):
                 if i > 0: scope.reuse_variables()
                 with tf.variable_scope("LSTM3"):
-                    curr_input = tf.concat([cat_data, att_data, output_semantic, current_embed], 1)
+                    curr_input = tf.concat([cat_data, embed_att, output_semantic, current_embed], 1)
                     output3, state3 = self.lstm3_dropout(curr_input, state3) # b x h
                 labels = tf.expand_dims(caption[:,i], 1) # b x 1
                 indices = tf.expand_dims(tf.range(0, self.batch_size, 1), 1) # b x 1
@@ -191,6 +198,9 @@ class Video_Caption_Generator():
 
     def build_v2s_generator(self, video_feat, cat_data, att_data):
         video_feat = video_feat * tf.constant(feat_scale_factor)
+
+        ### embedding of attribute
+        embed_att= tf.nn.xw_plus_b(att_data, self.embed_att_w, self.embed_att_b)
         ####### Encoding Video ##########
         # encoding video
         embed_video = tf.reduce_mean(video_feat, axis=1) # b x d_im
@@ -217,7 +227,7 @@ class Video_Caption_Generator():
             scope.reuse_variables()
             for i in range(self.n_caption_steps):
                 with tf.variable_scope("LSTM3") as vs:
-                    curr_input = tf.concat([cat_data, att_data, output_semantic, current_embed], 1)
+                    curr_input = tf.concat([cat_data, embed_att, output_semantic, current_embed], 1)
                     output3, state3 = self.lstm3(curr_input, state3 ) # b x h
                     lstm3_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
                 logit_words = tf.nn.xw_plus_b(output3, self.embed_word_W, self.embed_word_b) # b x w
@@ -234,6 +244,9 @@ class Video_Caption_Generator():
         c_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         state2 = (c_init, m_init) # 2 x b x h
+
+        ### embedding of attribute
+        embed_att = tf.nn.xw_plus_b(att_data, self.embed_att_w, self.embed_att_b)
 
         ######## Encoding Stage #########
         # encoding sentence
@@ -267,7 +280,7 @@ class Video_Caption_Generator():
             scope.reuse_variables()
             for i in range(self.n_caption_steps):
                 with tf.variable_scope("LSTM3") as vs:
-                    curr_input = tf.concat([cat_data, att_data, output_semantic, current_embed])
+                    curr_input = tf.concat([cat_data, embed_att, output_semantic, current_embed])
                     output3, state3 = self.lstm3(curr_input, state3 ) # b x h
                     lstm3_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
                 logit_words = tf.nn.xw_plus_b(output3, self.embed_word_W, self.embed_word_b) # b x w
