@@ -26,7 +26,7 @@ c3d_feat_folder_val = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_val
 c3d_feat_folder_test = '/disk_new/XuKS/caffe-recurrent/examples/s2vt/hdf5_c3d_test/'
 cat_feat_folder = '/disk_new/yjiwei/msrvtt/train/category/'
 att_feat_folder = '/disk_new/yjiwei/msrvtt/train/image_attributes/'
-v2s_json = home_folder + 'msrvtt2sent.json'
+v2s_json = home_folder + 'data0/msrvtt2sent.json'
 vgg_feat_name = 'frame_vgg'
 c3d_feat_name = 'frame_c3d'
 cat_feat_name = 'category'
@@ -288,6 +288,7 @@ def trans_video_msrvtt_record_cat_att(datasplit_list, datasplit, wordtoix):
     filename = feature_folder + datasplit + '.tfrecords'
     print('Writing', filename)
     writer = tf.python_io.TFRecordWriter(filename)
+    gt_data_sz = 0
     for ele in datasplit_list:
         if datasplit == 'train':
             vgg_feat_file = vgg_feat_folder_train + ele
@@ -309,6 +310,8 @@ def trans_video_msrvtt_record_cat_att(datasplit_list, datasplit, wordtoix):
         c3d_feat = np.squeeze(np.asarray(h5py.File(c3d_feat_file)[c3d_feat_name]))
         cat_feat = np.squeeze(np.asarray(h5py.File(cat_feat_file)[cat_feat_name]))
         att_feat = np.squeeze(np.asarray(h5py.File(att_feat_file)[att_feat_name]))
+        assert cat_feat.shape[0] == 20
+        assert att_feat.shape[0] == 1000
         # to solve the number of frames mismatch between different videos
         sample_data = np.zeros([n_length, 4096 * 2])
         encode_data = np.zeros([n_length, 4096 * 2])
@@ -340,8 +343,20 @@ def trans_video_msrvtt_record_cat_att(datasplit_list, datasplit, wordtoix):
                     ### caption labels ###
                     capl = np.zeros([cap_length])
                     capl[:n_words + 1] = 1
-                    write_data_as_record_cat_att(writer, sample_data, encode_data,
+                    sz_data = write_data_as_record_cat_att(writer, sample_data, encode_data,
                         video_name, title, vl, capl, cap_id, cap_id_1, frame_data, cat_feat, att_feat)
+                    if cnt == 1:
+                        gt_data_sz = sz_data
+#                    if sz_data != gt_data_sz:
+#                        print 'sample_data:', sample_data.shape
+#                        print 'encode_data:', encode_data.shape
+#                        print 'video_name:', video_name
+#                        print 'title:', title
+#                        print 'cap_id:', cap_id
+#                        print 'cap_id_1:', cap_id_1
+#                        print 'frame_data:', frame_data.shape
+#                        print 'cat_data:', cat_feat.shape
+#                        print 'att_feat:', att_feat.shape
                     cnt += 1
     print 'totally', cnt, 'v2s pairs.'
     writer.close()

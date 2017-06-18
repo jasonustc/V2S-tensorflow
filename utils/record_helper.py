@@ -20,6 +20,10 @@ def _bytes_feature(value):
 def _float_feature(value):
 	return tf.train.Feature(float_list=tf.train.FloatList(value=[value]))
 
+### TODO: a general write data api ###
+def write_list_to_recored():
+    pass
+
 def write_data_as_record(record_writer, data, encode_data, fname,
 	title, video_label, caption_label, caption_id, caption_id_1,
 	caption_id_2, caption_id_3, caption_id_4, caption_id_5, frame_data):
@@ -117,7 +121,10 @@ def write_data_as_record_cat_att(record_writer, data, encode_data, fname,
 		'cat_data': _bytes_feature(cat_data),
 		'att_data': _bytes_feature(att_data)
 		}))
-	record_writer.write(example.SerializeToString())
+        example_str = example.SerializeToString()
+	record_writer.write(example_str)
+        ## for data size check
+        return len(example_str)
 
 def read_record_file(filename):
 	assert os.path.isfile(filename)
@@ -288,12 +295,33 @@ def read_and_decode_frame_cat_att(filename):
 if __name__ == "__main__":
     data, encode_data, fname, title, video_label, caption_label, caption_id, \
     caption_id_1, frame_data, cat_data, att_data = read_and_decode_frame_cat_att('/home/shenxu/data/msrvtt_frame_cat_att/train.tfrecords')
+    train_frame_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
+        train_cat_data, train_att_data = \
+    tf.train.shuffle_batch([frame_data, encode_data, video_label, caption_label, caption_id, caption_id_1,
+        cat_data, att_data], batch_size=1, num_threads=1, capacity=2, min_after_dequeue=1)
     with tf.device("/cpu:0"):
         sess = tf.InteractiveSession()
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    data, encode_data, fname, title, video_label, caption_label, caption_id, caption_id_1, frame_data, cat_data, att_data = \
-        sess.run([data, encode_data, fname, title, video_label, caption_label, caption_id, caption_id_1, frame_data, cat_data, att_data])
+    for i in xrange(200000):
+        if i > 102900:
+            try:
+                train_data_r, train_encode_data_r, train_video_label_r, train_caption_label_r, train_caption_id_r, train_caption_id_1_r, \
+                    train_frame_data, train_cat_data_r, train_att_data_r = sess.run(
+#            [train_frame_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
+#            train_cat_data, train_att_data])
+                    [data, encode_data, video_label, caption_label, caption_id, \
+                    caption_id_1, frame_data, cat_data, att_data])
+            except Exception as e:
+                print i, ':', e
+                pdb.set_trace()
+        else:
+                train_cat_data_r = sess.run(
+#            [train_frame_data, train_encode_data, train_video_label, train_caption_label, train_caption_id, train_caption_id_1, \
+#            train_cat_data, train_att_data])
+                [cat_data])
+        if i % 100 == 0:
+            print i
     coord.request_stop()
     coord.join(threads)
     pdb.set_trace()

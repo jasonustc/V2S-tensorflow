@@ -533,8 +533,8 @@ def train():
         loss_epoch_cap += loss_cap
         loss_epoch_vid += loss_vid
 
-#        if step % n_epoch_steps == 0:
-        if step % 3 == 0:
+        if step % n_epoch_steps == 0:
+#        if step % 3 == 0:
             epoch += 1
             loss_epoch /= n_epoch_steps
             loss_epoch_cap /= n_epoch_steps
@@ -547,8 +547,8 @@ def train():
             loss_epoch_cap = 0
             loss_epoch_vid = 0
             ######### test sentence generation ##########
-#            n_val_steps = int(n_val_samples / batch_size)
-            n_val_steps = 3
+            n_val_steps = int(n_val_samples / batch_size)
+#            n_val_steps = 3
             ### TODO: sometimes COCO test show exceptions in the beginning of training ####
             if test_v2s:
                 [pred_sent, gt_sent, id_list, gt_dict, pred_dict, flist] = testing_all(sess, 1, ixtoword, val_v2s_tf, val_fname)

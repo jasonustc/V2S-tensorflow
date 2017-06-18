@@ -36,6 +36,9 @@ save_demo_sent_v2s = True
 save_demo_sent_s2s = False
 save_demo_video_v2v = False
 save_demo_video_s2v = False
+video_data_path_train = '/disk_2T/shenxu/msrvtt_vgg_c3d_frame_cat_att/train.tfrecords'
+video_data_path_val = '/disk_2T/shenxu/msrvtt_vgg_c3d_frame_cat_att/val.tfrecords'
+video_data_path_test = '/disk_2T/shenxu/msrvtt_vgg_c3d_frame_cat_att/test.tfrecords'
 ###### custom parameters #####
 
 class Video_Caption_Generator():
@@ -86,7 +89,7 @@ class Video_Caption_Generator():
         self.h2h_w = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden], -0.1, 0.1), name='h2h_w')
         self.h2h_b = tf.Variable(tf.zeros([dim_hidden]), name='h2h_b')
         self.h2c_w = tf.Variable(tf.random_uniform([dim_hidden, dim_hidden], -0.1, 0.1), name='h2c_w')
-        self.h2c_w = tf.Variable(tf.zeros([dim_hidden]), name='h2c_b')
+        self.h2c_b = tf.Variable(tf.zeros([dim_hidden]), name='h2c_b')
 
     def build_model(self, video_feat, frames, video_mask, caption, caption_1, caption_mask,
         cat_data, att_data):
@@ -245,9 +248,6 @@ class Video_Caption_Generator():
         m_init = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
         state2 = (c_init, m_init) # 2 x b x h
 
-        ### embedding of attribute
-        embed_att = tf.nn.xw_plus_b(att_data, self.embed_att_w, self.embed_att_b)
-
         ######## Encoding Stage #########
         # encoding sentence
         with tf.variable_scope("model") as scope:
@@ -272,7 +272,7 @@ class Video_Caption_Generator():
         c0 = tf.matmul(tf.nn.tanh(output_semantic), self.h2c_w) + self.h2c_b
         state3 = (c0, h0) # n x 2 x h
         current_embed = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
-        att_data = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
+        embed_att = tf.zeros([self.batch_size, self.dim_hidden]) # b x h
 
         generated_words = []
 
@@ -280,7 +280,7 @@ class Video_Caption_Generator():
             scope.reuse_variables()
             for i in range(self.n_caption_steps):
                 with tf.variable_scope("LSTM3") as vs:
-                    curr_input = tf.concat([cat_data, embed_att, output_semantic, current_embed])
+                    curr_input = tf.concat([cat_data, embed_att, output_semantic, current_embed], 1)
                     output3, state3 = self.lstm3(curr_input, state3 ) # b x h
                     lstm3_variables = [v for v in tf.global_variables() if v.name.startswith(vs.name)]
                 logit_words = tf.nn.xw_plus_b(output3, self.embed_word_W, self.embed_word_b) # b x w
